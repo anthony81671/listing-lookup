@@ -217,7 +217,7 @@ function LookupTable({ rows, activeTab, onRowClick }: { rows: ReturnType<typeof 
             <th className="px-3 py-2 text-left font-semibold text-slate-500">Address</th>
             <th className="px-3 py-2 text-left font-semibold text-slate-500">City</th>
             <th className="px-3 py-2 text-right font-semibold text-slate-500">SF</th>
-            <th className="px-3 py-2 text-right font-semibold text-slate-500">Rate</th>
+            <th className="px-3 py-2 text-right font-semibold text-slate-500">Rate/Price</th>
             <th className="px-3 py-2 font-semibold text-slate-500">Type</th>
             <th className="px-3 py-2 font-semibold text-slate-500">Date</th>
             <th className="px-3 py-2 font-semibold text-slate-500">Party</th>
