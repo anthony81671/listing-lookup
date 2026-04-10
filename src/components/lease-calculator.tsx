@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { calculate } from '@/lib/calculator';
-import type { CalcInputs } from '@/types';
-import { Calculator, X, DollarSign, Calendar } from 'lucide-react';
+import type { CalcInputs, UnifiedListing } from '@/types';
+import { Calculator, X, DollarSign, Calendar, Building2 } from 'lucide-react';
 
 const DEFAULT_INPUTS: CalcInputs = {
   sqFt: '',
@@ -144,15 +144,38 @@ const ResultCard = ({
 
 // ---- Main Component ----
 
-export function LeaseCalculator() {
+export function LeaseCalculator({
+  prefill,
+  onClearPrefill,
+}: {
+  prefill?: UnifiedListing | null;
+  onClearPrefill?: () => void;
+}) {
   const [inputs, setInputs] = useState<CalcInputs>(DEFAULT_INPUTS);
+
+  // Apply prefill whenever a listing is sent from the search tab
+  useEffect(() => {
+    if (!prefill) return;
+    const sqFt = prefill.available_sqft || prefill.building_sqft || '';
+    const rate = (prefill.rate_per_sf ?? '').replace(/[^0-9.]/g, '');
+    const rentType = prefill.rent_type || 'NNN';
+    setInputs((prev) => ({
+      ...prev,
+      sqFt: sqFt.replace(/[^0-9.]/g, ''),
+      rentPerSqFt: rate,
+      rentType,
+    }));
+  }, [prefill]);
 
   const set = (key: keyof CalcInputs) => (val: string) =>
     setInputs((prev) => ({ ...prev, [key]: val }));
 
   const result = useMemo(() => calculate(inputs), [inputs]);
 
-  const handleClear = () => setInputs(DEFAULT_INPUTS);
+  const handleClear = () => {
+    setInputs(DEFAULT_INPUTS);
+    onClearPrefill?.();
+  };
 
   const rateDecimals = (() => {
     if (!inputs.rentPerSqFt) return 2;
@@ -176,6 +199,22 @@ export function LeaseCalculator() {
           <X size={16} />Clear
         </button>
       </div>
+
+      {/* Prefill Banner */}
+      {prefill && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm">
+          <Building2 size={15} className="text-green-600 flex-shrink-0" />
+          <span className="text-green-800 font-medium flex-1">
+            Pre-filled from: <span className="font-bold">{prefill.street_address}</span>
+            {prefill.city ? `, ${prefill.city}` : ''}
+            {prefill.available_sqft ? ` — ${Number(prefill.available_sqft.replace(/[^0-9.]/g, '')).toLocaleString()} SF` : ''}
+            {prefill.rate_per_sf ? ` @ $${prefill.rate_per_sf}/SF` : ''}
+          </span>
+          <button onClick={onClearPrefill} className="text-green-600 hover:text-green-800 transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* Parameters Card */}
       <Card className="p-5">

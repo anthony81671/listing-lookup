@@ -3,12 +3,19 @@
 import { useState } from 'react';
 import { ListingsSearch } from '@/components/listings-search';
 import { LeaseCalculator } from '@/components/lease-calculator';
+import type { UnifiedListing } from '@/types';
 import { Building2, Calculator } from 'lucide-react';
 
 type Tab = 'listings' | 'calculator';
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('listings');
+  const [calcPrefill, setCalcPrefill] = useState<UnifiedListing | null>(null);
+
+  const handleUseInCalculator = (listing: UnifiedListing) => {
+    setCalcPrefill(listing);
+    setTab('calculator');
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-800">
@@ -21,7 +28,6 @@ export default function Home() {
               <span className="font-bold text-slate-900 text-sm tracking-tight">ListingLookup</span>
             </div>
             <span className="text-slate-300">|</span>
-            {/* Tab Toggle */}
             <div className="flex bg-slate-100 rounded-lg p-1">
               <button
                 onClick={() => setTab('listings')}
@@ -42,9 +48,11 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {tab === 'listings' ? <ListingsSearch /> : <LeaseCalculator />}
+        {tab === 'listings'
+          ? <ListingsSearch onUseInCalculator={handleUseInCalculator} />
+          : <LeaseCalculator prefill={calcPrefill} onClearPrefill={() => setCalcPrefill(null)} />
+        }
       </main>
     </div>
   );

@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnifiedListing } from '@/types';
-import { Search, X, ChevronLeft, ChevronRight, ExternalLink, Building2, MessageSquareQuote } from 'lucide-react';
+import { Search, X, ChevronLeft, ChevronRight, ExternalLink, Calculator } from 'lucide-react';
 
 const PAGE_SIZE = 25;
-const FETCH_LIMIT = 300; // per table
+const FETCH_LIMIT = 300;
 
 // ---- Normalizers ----
 
@@ -24,7 +24,7 @@ function normalizeIls(row: Record<string, string | null | number>): UnifiedListi
     submarket: (row.submarket as string) ?? null,
     property_name: (row.business_park as string) ?? null,
     building_sqft: (row.sq_ft as string) ?? null,
-    available_sqft: (row.sq_ft as string) ?? null, // ILS lists full available building
+    available_sqft: (row.sq_ft as string) ?? null,
     office_sqft: (row.office_sf as string) ?? null,
     clear_height: (row.clear_ht as string) ?? null,
     dh_doors: (row.dh as string) ?? null,
@@ -54,7 +54,7 @@ function normalizeIls(row: Record<string, string | null | number>): UnifiedListi
 
 function normalizeAir(row: Record<string, string | null | number>): UnifiedListing {
   return {
-    report_id: Number(row.id) + 1_000_000, // offset to avoid key collision with ILS
+    report_id: Number(row.id) + 1_000_000,
     source: 'AIR',
     listing_number: (row.listing_number as string) ?? null,
     listing_date: (row.date as string) ?? null,
@@ -100,120 +100,163 @@ function sortByDate(a: UnifiedListing, b: UnifiedListing): number {
   return db - da;
 }
 
-// ---- Sub-components ----
+// ---- Helpers ----
 
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
-    {children}
-  </div>
+  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>{children}</div>
 );
 
 function fmt(val: string | null | undefined, fallback = '—') {
-  if (!val || val.trim() === '') return fallback;
-  return val;
+  return val?.trim() || fallback;
 }
 
 function fmtNum(val: string | null | undefined) {
-  if (!val || val.trim() === '') return '—';
+  if (!val?.trim()) return '—';
   const n = parseFloat(val.replace(/[^0-9.]/g, ''));
-  if (isNaN(n)) return val;
-  return n.toLocaleString();
+  return isNaN(n) ? val : n.toLocaleString();
 }
 
-const DetailItem = ({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) => (
-  <div className={`p-3 rounded-lg ${highlight ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 border border-slate-200'}`}>
-    <div className="text-xs font-bold text-slate-500 uppercase mb-1">{label}</div>
-    <div className={`text-sm font-semibold ${highlight ? 'text-blue-700' : 'text-slate-800'}`}>{value}</div>
-  </div>
-);
+// ---- Property Banner (matches LeaseAnalyzer inline property info) ----
 
-const ListingModal = ({ listing, onClose }: { listing: UnifiedListing; onClose: () => void }) => (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-      <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-2xl">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-lg transition-colors">
-          <X size={24} />
-        </button>
-        <div className="pr-12">
-          {listing.property_name && <h2 className="text-2xl font-bold mb-1">{listing.property_name}</h2>}
-          <p className="text-blue-100 text-lg font-medium">{listing.street_address}</p>
-          <p className="text-blue-200 text-sm mt-1">{[listing.city, listing.state].filter(Boolean).join(', ')}</p>
-          {listing.listing_status && (
-            <div className="mt-3 inline-block">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-400 text-blue-900">{listing.listing_status}</span>
+function PropertyBanner({
+  listing,
+  onDismiss,
+  onUseInCalculator,
+}: {
+  listing: UnifiedListing;
+  onDismiss: () => void;
+  onUseInCalculator: (l: UnifiedListing) => void;
+}) {
+  const brochureUrl = listing.marketing_flyer || listing.pdf_url;
+  const col = (label: string, value: string) => (
+    <td className="pr-5 py-0.5">
+      <span className="text-slate-800 font-bold text-[12px]">{value}</span>
+    </td>
+  );
+  const hdr = (label: string) => (
+    <th className="text-left pr-5 pb-0.5 text-slate-400 font-semibold text-[11px]">{label}</th>
+  );
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden text-sm">
+      {/* Dark header */}
+      <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          {listing.property_name && (
+            <div className="font-bold text-base leading-tight">{listing.property_name}</div>
+          )}
+          <div className="text-slate-200">{listing.street_address}</div>
+          <div className="text-slate-400 text-xs flex items-center gap-2 mt-0.5">
+            {listing.city && <span>{listing.city}{listing.state ? `, ${listing.state}` : ''}</span>}
+            {listing.listing_status && (
+              <span className="bg-slate-600 px-1.5 py-0.5 rounded text-xs font-medium">{listing.listing_status}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {listing.photo_url && (
+            <a href={listing.photo_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs bg-slate-600 hover:bg-slate-500 px-2 py-1 rounded transition-colors">
+              Photo
+            </a>
+          )}
+          {brochureUrl && (
+            <a href={brochureUrl} target="_blank" rel="noopener noreferrer"
+              className="text-xs bg-red-700 hover:bg-red-600 px-2 py-1 rounded transition-colors">
+              Brochure
+            </a>
+          )}
+          {listing.property_link && (
+            <a href={listing.property_link} target="_blank" rel="noopener noreferrer"
+              className="text-xs bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded transition-colors flex items-center gap-1">
+              <ExternalLink size={11} />Link
+            </a>
+          )}
+          <button
+            onClick={() => onUseInCalculator(listing)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Calculator size={13} />Use in Calculator
+          </button>
+          <button onClick={onDismiss} className="p-1 hover:bg-white/20 rounded transition-colors" title="Dismiss">
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Property details table */}
+      <div className="px-5 py-3 flex gap-5">
+        <div className="flex-shrink-0">
+          <table className="text-[12px] border-collapse">
+            <thead>
+              <tr>
+                {hdr('Bldg SF')}{hdr('Rate/SF')}{hdr('Rent Type')}{hdr('DH/GL')}{hdr('Clear Ht')}{hdr('Status')}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {col('Bldg SF', fmtNum(listing.building_sqft))}
+                {col('Rate/SF', listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—')}
+                {col('Rent Type', fmt(listing.rent_type))}
+                {col('DH/GL', `${fmt(listing.dh_doors, '0')}/${fmt(listing.gl_doors, '0')}`)}
+                {col('Clear Ht', fmt(listing.clear_height))}
+                {col('Status', fmt(listing.listing_status))}
+              </tr>
+            </tbody>
+            <thead>
+              <tr>
+                {hdr('Avail SF')}{hdr('Office SF')}{hdr('Amps')}{hdr('Parking')}{hdr('Yard')}{hdr('Rail')}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {col('Avail SF', fmtNum(listing.available_sqft))}
+                {col('Office SF', fmtNum(listing.office_sqft))}
+                {col('Amps', fmt(listing.amperage))}
+                {col('Parking', fmt(listing.parking_spaces) !== '—' ? fmt(listing.parking_spaces) : fmt(listing.parking_ratio))}
+                {col('Yard', fmt(listing.yard_space))}
+                {col('Rail', fmt(listing.rail_access))}
+              </tr>
+            </tbody>
+          </table>
+          {listing.company_agent && (
+            <div className="mt-2 pt-2 border-t border-slate-200 text-[12px] text-slate-700 font-medium whitespace-pre-line">
+              {listing.company_agent}
             </div>
           )}
         </div>
-      </div>
-      <div className="p-6 space-y-6">
-        <div>
-          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <Building2 size={20} className="text-blue-600" />Property Details
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <DetailItem label="Bldg SF" value={fmtNum(listing.building_sqft)} />
-            <DetailItem label="Available SF" value={fmtNum(listing.available_sqft)} />
-            <DetailItem label="Office SF" value={fmtNum(listing.office_sqft)} />
-            <DetailItem label="Rate / SF" value={listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—'} highlight />
-            <DetailItem label="Rent Type" value={fmt(listing.rent_type)} />
-            <DetailItem label="Sale / SF" value={listing.sale_price_per_sf ? `$${listing.sale_price_per_sf}` : '—'} />
-            <DetailItem label="DH / GL Doors" value={`${fmt(listing.dh_doors, '0')} / ${fmt(listing.gl_doors, '0')}`} />
-            <DetailItem label="Clear Height" value={fmt(listing.clear_height)} />
-            <DetailItem label="Amps" value={fmt(listing.amperage)} />
-            <DetailItem label="Sprinklers" value={fmt(listing.sprinklers)} />
-            <DetailItem label="Rail Access" value={fmt(listing.rail_access)} />
-            <DetailItem label="Yard" value={fmt(listing.yard_space)} />
-            <DetailItem label="Parking" value={fmt(listing.parking_spaces)} />
-            <DetailItem label="Parking Ratio" value={fmt(listing.parking_ratio)} />
-            <DetailItem label="Source / #" value={`${listing.source}${listing.listing_number ? ` #${listing.listing_number}` : ''}`} highlight />
-          </div>
-        </div>
         {(listing.highlights || listing.comments) && (
-          <div>
-            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-              <MessageSquareQuote size={20} className="text-blue-600" />Notes
-            </h3>
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
-              {listing.highlights && <p className="text-slate-800 text-sm font-medium whitespace-pre-wrap">{listing.highlights}</p>}
-              {listing.comments && <p className="text-slate-600 text-sm whitespace-pre-wrap">{listing.comments}</p>}
-            </div>
-          </div>
-        )}
-        {listing.company_agent && (
-          <div>
-            <h3 className="text-lg font-bold text-slate-800 mb-3">Agent Information</h3>
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-              <p className="text-slate-700 text-sm whitespace-pre-line">{listing.company_agent}</p>
-            </div>
-          </div>
-        )}
-        {(listing.property_link || listing.marketing_flyer || listing.pdf_url) && (
-          <div className="flex gap-3 pt-4 border-t border-slate-200">
-            {listing.property_link && (
-              <a href={listing.property_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
-                <ExternalLink size={16} />Property Link
-              </a>
+          <div className="flex-1 min-w-0 border-l border-slate-200 pl-5">
+            <div className="text-[11px] font-semibold text-slate-400 uppercase mb-1">Listing Notes</div>
+            {listing.highlights && (
+              <p className="text-slate-800 text-[12px] leading-relaxed whitespace-pre-line font-medium">{listing.highlights}</p>
             )}
-            {listing.marketing_flyer && (
-              <a href={listing.marketing_flyer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm">
-                <ExternalLink size={16} />Marketing Flyer
-              </a>
-            )}
-            {listing.pdf_url && (
-              <a href={listing.pdf_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition-colors font-medium text-sm">
-                <ExternalLink size={16} />PDF
-              </a>
+            {listing.comments && (
+              <p className="text-slate-600 text-[12px] leading-relaxed whitespace-pre-line mt-1">{listing.comments}</p>
             )}
           </div>
         )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="font-mono font-semibold">
+            {listing.source} {listing.listing_number ? `#${listing.listing_number}` : ''}
+          </span>
+          {(listing.market || listing.submarket) && (
+            <span className="text-slate-400">{[listing.market, listing.submarket].filter(Boolean).join(' / ')}</span>
+          )}
+        </div>
+        {listing.listing_date && <span>Listed: {listing.listing_date}</span>}
       </div>
     </div>
-  </div>
-);
+  );
+}
 
 // ---- Main Component ----
 
-export function ListingsSearch() {
+export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: UnifiedListing) => void }) {
   const [query, setQuery] = useState('');
   const [streetNumber, setStreetNumber] = useState('');
   const [streetName, setStreetName] = useState('');
@@ -226,7 +269,6 @@ export function ListingsSearch() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UnifiedListing | null>(null);
 
-  // Load city list from both tables once
   useEffect(() => {
     Promise.all([
       supabase.from('ils').select('city').neq('city', null),
@@ -243,7 +285,6 @@ export function ListingsSearch() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     const db = supabase as any;
 
     const buildIlsQuery = () => {
@@ -281,6 +322,11 @@ export function ListingsSearch() {
       ].sort(sortByDate);
 
       setAllListings(merged);
+      // Update selected with fresh data if still selected
+      if (selected) {
+        const refreshed = merged.find(l => l.source === selected.source && l.report_id === selected.report_id);
+        if (refreshed) setSelected(refreshed);
+      }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -288,13 +334,8 @@ export function ListingsSearch() {
     setLoading(false);
   }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { setPage(1); }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
+  useEffect(() => { load(); }, [load]);
 
   const handleSearch = () => { setPage(1); load(); };
 
@@ -307,7 +348,7 @@ export function ListingsSearch() {
   const btnSlate = 'px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm whitespace-nowrap';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Search Bar */}
       <Card className="px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
@@ -316,14 +357,11 @@ export function ListingsSearch() {
             <div className="flex gap-1.5">
               <div className="relative">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={query}
+                <input type="text" value={query}
                   onChange={(e) => { setQuery(e.target.value); setStreetNumber(''); setStreetName(''); }}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   placeholder="Address, listing #, agent..."
-                  className={`w-56 pl-8 ${inputCls}`}
-                />
+                  className={`w-56 pl-8 ${inputCls}`} />
               </div>
               <button onClick={handleSearch} className={btnBlue}>Search</button>
               {query && (
@@ -339,21 +377,13 @@ export function ListingsSearch() {
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Address Search</label>
             <div className="flex gap-1.5">
-              <input
-                type="text"
-                value={streetNumber}
+              <input type="text" value={streetNumber}
                 onChange={(e) => { setStreetNumber(e.target.value); setQuery(''); }}
-                placeholder="St #"
-                className={`w-20 ${inputCls}`}
-              />
-              <input
-                type="text"
-                value={streetName}
+                placeholder="St #" className={`w-20 ${inputCls}`} />
+              <input type="text" value={streetName}
                 onChange={(e) => { setStreetName(e.target.value); setQuery(''); }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Street Name"
-                className={`w-40 ${inputCls}`}
-              />
+                placeholder="Street Name" className={`w-40 ${inputCls}`} />
               <button onClick={handleSearch} className={btnSlate}>Search</button>
             </div>
           </div>
@@ -364,11 +394,8 @@ export function ListingsSearch() {
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Source</label>
             <div className="flex bg-slate-100 rounded-lg p-1">
               {(['all', 'ILS', 'AIR'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSourceFilter(s)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${sourceFilter === s ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-800'}`}
-                >
+                <button key={s} onClick={() => setSourceFilter(s)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${sourceFilter === s ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-800'}`}>
                   {s === 'all' ? 'All' : s}
                 </button>
               ))}
@@ -390,6 +417,15 @@ export function ListingsSearch() {
         <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
           Error: {error}
         </div>
+      )}
+
+      {/* Property Banner */}
+      {selected && (
+        <PropertyBanner
+          listing={selected}
+          onDismiss={() => setSelected(null)}
+          onUseInCalculator={onUseInCalculator}
+        />
       )}
 
       {/* Results count */}
@@ -431,17 +467,22 @@ export function ListingsSearch() {
                 </tr>
               ) : (
                 listings.map((l) => {
+                  const isActive = selected?.source === l.source && selected?.report_id === l.report_id;
                   const photoUrl = l.photo_url;
                   const brochureUrl = l.marketing_flyer || l.pdf_url || l.property_link;
                   return (
-                    <tr key={`${l.source}-${l.report_id}`} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setSelected(l)}>
+                    <tr
+                      key={`${l.source}-${l.report_id}`}
+                      className={`cursor-pointer transition-colors ${isActive ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                      onClick={() => setSelected(isActive ? null : l)}
+                    >
                       <td className="px-4 py-3">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.source === 'AIR' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
                           {l.source}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{l.street_address ?? '—'}</div>
+                        <div className={`font-medium ${isActive ? 'text-blue-700' : 'text-slate-900'}`}>{l.street_address ?? '—'}</div>
                         {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{fmt(l.city)}</td>
@@ -458,31 +499,17 @@ export function ListingsSearch() {
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1.5">
                           {photoUrl ? (
-                            <a
-                              href={photoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="View Photo"
-                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors"
-                            >
+                            <a href={photoUrl} target="_blank" rel="noopener noreferrer" title="View Photo"
+                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors">
                               Photo
                             </a>
-                          ) : (
-                            <span className="text-xs text-slate-200">—</span>
-                          )}
+                          ) : <span className="text-xs text-slate-200">—</span>}
                           {brochureUrl ? (
-                            <a
-                              href={brochureUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="View Brochure"
-                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-700 transition-colors"
-                            >
+                            <a href={brochureUrl} target="_blank" rel="noopener noreferrer" title="View Brochure"
+                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-700 transition-colors">
                               PDF
                             </a>
-                          ) : (
-                            <span className="text-xs text-slate-200">—</span>
-                          )}
+                          ) : <span className="text-xs text-slate-200">—</span>}
                         </div>
                       </td>
                     </tr>
@@ -497,11 +524,8 @@ export function ListingsSearch() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-1.5">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <ChevronLeft size={16} />
           </button>
           {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
@@ -511,27 +535,18 @@ export function ListingsSearch() {
             else if (page >= totalPages - 3) pg = totalPages - 6 + i;
             else pg = page - 3 + i;
             return (
-              <button
-                key={pg}
-                onClick={() => setPage(pg)}
-                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${pg === page ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'}`}
-              >
+              <button key={pg} onClick={() => setPage(pg)}
+                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${pg === page ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'}`}>
                 {pg}
               </button>
             );
           })}
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
+          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             <ChevronRight size={16} />
           </button>
         </div>
       )}
-
-      {/* Detail Modal */}
-      {selected && <ListingModal listing={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
