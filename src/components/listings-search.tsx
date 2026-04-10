@@ -116,6 +116,13 @@ function fmtNum(val: string | null | undefined) {
   return isNaN(n) ? val : n.toLocaleString();
 }
 
+// ILS stores rates as "$1.50"; AIR stores as "1.50" — avoid double-$
+function fmtRate(val: string | null | undefined) {
+  if (!val?.trim()) return '—';
+  if (val.startsWith('$') || isNaN(parseFloat(val))) return val; // already has $ or is TBD/NFL
+  return `$${val}`;
+}
+
 // ---- Property Banner (matches LeaseAnalyzer inline property info) ----
 
 function PropertyBanner({
@@ -196,7 +203,7 @@ function PropertyBanner({
             <tbody>
               <tr>
                 {col('Bldg SF', fmtNum(listing.building_sqft))}
-                {col('Rate/SF', listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—')}
+                {col('Rate/SF', fmtRate(listing.rate_per_sf))}
                 {col('Rent Type', fmt(listing.rent_type))}
                 {col('DH/GL', `${fmt(listing.dh_doors, '0')}/${fmt(listing.gl_doors, '0')}`)}
                 {col('Clear Ht', fmt(listing.clear_height))}
@@ -268,6 +275,7 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UnifiedListing | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -335,9 +343,9 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
   }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
   useEffect(() => { setPage(1); }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (hasSearched) load(); }, [load, hasSearched]);
 
-  const handleSearch = () => { setPage(1); load(); };
+  const handleSearch = () => { setHasSearched(true); setPage(1); load(); };
 
   const total = allListings.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -431,7 +439,7 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
       {/* Results count */}
       <div className="flex items-center justify-between px-1">
         <span className="text-sm font-medium text-slate-500">
-          {loading ? 'Loading...' : `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}${total >= FETCH_LIMIT * (sourceFilter === 'all' ? 2 : 1) ? '+' : ''}`}
+          {loading ? 'Loading...' : hasSearched ? `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}${total >= FETCH_LIMIT * (sourceFilter === 'all' ? 2 : 1) ? '+' : ''}` : ''}
         </span>
         {totalPages > 1 && (
           <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -462,7 +470,7 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
               {listings.length === 0 && !loading ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
-                    {error ? 'Could not load listings' : 'No listings found'}
+                    {error ? 'Could not load listings' : !hasSearched ? 'Enter a search above to find listings' : 'No listings found'}
                   </td>
                 </tr>
               ) : (
@@ -489,7 +497,7 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
                       <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.building_sqft)}</td>
                       <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.available_sqft)}</td>
                       <td className="px-4 py-3 text-right font-bold text-blue-600 hidden lg:table-cell">
-                        {l.rate_per_sf ? `$${l.rate_per_sf}` : '—'}
+                        {fmtRate(l.rate_per_sf)}
                       </td>
                       <td className="px-4 py-3 text-center text-slate-600 hidden lg:table-cell">
                         {fmt(l.dh_doors, '0')}/{fmt(l.gl_doors, '0')}
