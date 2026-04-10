@@ -1,5 +1,5 @@
 export interface UnifiedListing {
-  id: string;
+  report_id: number;
   source: 'ILS' | 'AIR';
   listing_number: string | null;
   listing_date: string | null;

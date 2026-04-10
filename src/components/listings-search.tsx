@@ -173,51 +173,58 @@ export function ListingsSearch() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UnifiedListing | null>(null);
+
+  // vw_unified_listing_report is a view not in generated types — cast to bypass
+  const db = supabase as any;
 
   // Load city list once
   useEffect(() => {
-    supabase
+    db
       .from('vw_unified_listing_report')
       .select('city')
       .neq('city', null)
-      .then(({ data }) => {
+      .then(({ data }: { data: { city: string | null }[] | null }) => {
         if (!data) return;
-        const unique = Array.from(new Set(data.map((r: { city: string | null }) => r.city).filter(Boolean) as string[])).sort();
+        const unique = Array.from(new Set(data.map((r) => r.city).filter(Boolean) as string[])).sort();
         setCities(unique);
       });
   }, []);
 
   const load = useCallback(async (p: number) => {
     setLoading(true);
+    setError(null);
     const from = (p - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    let q = supabase
+    let q = db
       .from('vw_unified_listing_report')
       .select('*', { count: 'exact' })
-      .order('listing_date', { ascending: false })
+      .order('listing_date', { ascending: false, nullsFirst: false })
       .range(from, to);
 
     if (sourceFilter !== 'all') q = q.eq('source', sourceFilter);
     if (cityFilter) q = q.eq('city', cityFilter);
 
     if (streetNumber || streetName) {
-      // Address search mode
-      if (streetName) {
-        q = q.ilike('street_address', `%${streetName}%`);
-      }
+      if (streetNumber) q = q.ilike('street_address', `${streetNumber}%`);
+      if (streetName) q = q.ilike('street_address', `%${streetName}%`);
     } else if (query.trim()) {
-      const term = `%${query.trim()}%`;
+      const t = query.trim();
       q = q.or(
-        `street_address.ilike.${term},listing_number.ilike.${term},company_agent.ilike.${term},property_name.ilike.${term}`
+        `street_address.ilike.%${t}%,listing_number.ilike.%${t}%,company_agent.ilike.%${t}%,property_name.ilike.%${t}%`
       );
     }
 
-    const { data, count, error } = await q;
-    if (!error && data) {
+    const { data, count, error: qErr } = await q;
+    if (qErr) {
+      setError(qErr.message);
+      setListings([]);
+      setTotal(0);
+    } else if (data) {
       setListings(data as UnifiedListing[]);
-      setTotal(count ?? 0);
+      setTotal(count ?? data.length);
     }
     setLoading(false);
   }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
@@ -326,6 +333,13 @@ export function ListingsSearch() {
         </div>
       </Card>
 
+      {/* Error */}
+      {error && (
+        <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium">
+          Error: {error}
+        </div>
+      )}
+
       {/* Results count */}
       <div className="flex items-center justify-between px-1">
         <span className="text-sm font-medium text-slate-500">
@@ -365,7 +379,7 @@ export function ListingsSearch() {
               ) : (
                 listings.map((l) => (
                   <tr
-                    key={l.id}
+                    key={l.report_id}
                     className="hover:bg-slate-50 cursor-pointer transition-colors"
                     onClick={() => setSelected(l)}
                   >
