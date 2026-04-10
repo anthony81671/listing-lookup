@@ -50,6 +50,25 @@ export interface CalcInputs {
   daysOnMarket: string;
   landAcres: string;
   parkingRatio: string;
+  // Transaction type
+  transactionType: 'lease' | 'sale';
+  // Parties
+  lessor: string;
+  lessee: string;
+  seller: string;
+  buyer: string;
+  // Listing broker
+  listCompany: string;
+  listAgent1First: string;
+  listAgent1Last: string;
+  listAgent2First: string;
+  listAgent2Last: string;
+  // Procuring broker
+  procCompany: string;
+  procAgent1First: string;
+  procAgent1Last: string;
+  procAgent2First: string;
+  procAgent2Last: string;
 }
 
 export interface CalcResults {

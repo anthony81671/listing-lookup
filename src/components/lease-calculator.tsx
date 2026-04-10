@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { calculate } from '@/lib/calculator';
 import type { CalcInputs, UnifiedListing } from '@/types';
-import { Calculator, X, DollarSign, Calendar, Building2 as _B2 } from 'lucide-react';
+import { Calculator, X, DollarSign, Calendar, Building2 as _B2, Users } from 'lucide-react';
 import { PropertyBanner } from '@/components/property-banner';
 
 const DEFAULT_INPUTS: CalcInputs = {
@@ -18,6 +18,21 @@ const DEFAULT_INPUTS: CalcInputs = {
   daysOnMarket: '',
   landAcres: '',
   parkingRatio: '',
+  transactionType: 'lease',
+  lessor: '',
+  lessee: '',
+  seller: '',
+  buyer: '',
+  listCompany: '',
+  listAgent1First: '',
+  listAgent1Last: '',
+  listAgent2First: '',
+  listAgent2Last: '',
+  procCompany: '',
+  procAgent1First: '',
+  procAgent1Last: '',
+  procAgent2First: '',
+  procAgent2Last: '',
 };
 
 // ---- Sub-components ----
@@ -280,14 +295,20 @@ function CompSummaryCard({
       {/* Broker/Party section */}
       <div className="border-t border-slate-200 px-4 py-3 grid grid-cols-2 gap-x-8 gap-y-1 font-mono text-[11px]">
         <div className="space-y-0.5">
-          <Field label="Lessee" value="" />
-          <Field label="Contact" value="" />
-          <Field label="Proc Firm" value="" />
+          <Field label={inputs.transactionType === 'sale' ? 'Buyer' : 'Lessee'} value={inputs.transactionType === 'sale' ? inputs.buyer : inputs.lessee} />
+          <Field label="Proc Firm" value={inputs.procCompany} />
+          <Field label="Proc Agent" value={[inputs.procAgent1First, inputs.procAgent1Last].filter(Boolean).join(' ')} />
+          {(inputs.procAgent2First || inputs.procAgent2Last) && (
+            <Field label="Proc Agent 2" value={[inputs.procAgent2First, inputs.procAgent2Last].filter(Boolean).join(' ')} />
+          )}
         </div>
         <div className="space-y-0.5">
-          <Field label="Lessor" value={prefill?.property_name ?? ''} />
-          <Field label="List Firm" value="" />
-          <Field label="Agent" value={prefill?.company_agent ?? ''} />
+          <Field label={inputs.transactionType === 'sale' ? 'Seller' : 'Lessor'} value={inputs.transactionType === 'sale' ? inputs.seller : inputs.lessor} />
+          <Field label="List Firm" value={inputs.listCompany || (prefill?.company_agent ?? '')} />
+          <Field label="List Agent" value={[inputs.listAgent1First, inputs.listAgent1Last].filter(Boolean).join(' ')} />
+          {(inputs.listAgent2First || inputs.listAgent2Last) && (
+            <Field label="List Agent 2" value={[inputs.listAgent2First, inputs.listAgent2Last].filter(Boolean).join(' ')} />
+          )}
         </div>
       </div>
 
@@ -472,6 +493,130 @@ export function LeaseCalculator({
                 onChange={() => {}}
                 readOnly
               />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Parties Card */}
+      <Card className="p-5">
+        <div className="space-y-4">
+          {/* Transaction type toggle */}
+          <div className="flex items-center gap-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Users size={13} /> Parties
+            </h3>
+            <div className="flex bg-slate-100 rounded-lg p-0.5 ml-auto">
+              <button
+                onClick={() => set('transactionType')('lease')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${inputs.transactionType === 'lease' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                Lease
+              </button>
+              <button
+                onClick={() => set('transactionType')('sale')}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${inputs.transactionType === 'sale' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                Sale
+              </button>
+            </div>
+          </div>
+
+          {/* Principal parties */}
+          <div className="grid grid-cols-2 gap-2">
+            <InputGroup
+              label={inputs.transactionType === 'lease' ? 'Lessor' : 'Seller'}
+              value={inputs.transactionType === 'lease' ? inputs.lessor : inputs.seller}
+              onChange={set(inputs.transactionType === 'lease' ? 'lessor' : 'seller')}
+              placeholder={inputs.transactionType === 'lease' ? 'Landlord name' : 'Seller name'}
+            />
+            <InputGroup
+              label={inputs.transactionType === 'lease' ? 'Lessee' : 'Buyer'}
+              value={inputs.transactionType === 'lease' ? inputs.lessee : inputs.buyer}
+              onChange={set(inputs.transactionType === 'lease' ? 'lessee' : 'buyer')}
+              placeholder={inputs.transactionType === 'lease' ? 'Tenant name' : 'Buyer name'}
+            />
+          </div>
+
+          {/* Listing broker */}
+          <div>
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 border-t border-slate-200 pt-3">
+              Listing Broker
+            </div>
+            <div className="space-y-2">
+              <InputGroup
+                label="Company"
+                value={inputs.listCompany}
+                onChange={set('listCompany')}
+                placeholder="Brokerage firm"
+              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <InputGroup
+                  label="Agent 1 First"
+                  value={inputs.listAgent1First}
+                  onChange={set('listAgent1First')}
+                  placeholder="First name"
+                />
+                <InputGroup
+                  label="Agent 1 Last"
+                  value={inputs.listAgent1Last}
+                  onChange={set('listAgent1Last')}
+                  placeholder="Last name"
+                />
+                <InputGroup
+                  label="Agent 2 First"
+                  value={inputs.listAgent2First}
+                  onChange={set('listAgent2First')}
+                  placeholder="First name"
+                />
+                <InputGroup
+                  label="Agent 2 Last"
+                  value={inputs.listAgent2Last}
+                  onChange={set('listAgent2Last')}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Procuring broker */}
+          <div>
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 border-t border-slate-200 pt-3">
+              Procuring Broker
+            </div>
+            <div className="space-y-2">
+              <InputGroup
+                label="Company"
+                value={inputs.procCompany}
+                onChange={set('procCompany')}
+                placeholder="Brokerage firm"
+              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <InputGroup
+                  label="Agent 1 First"
+                  value={inputs.procAgent1First}
+                  onChange={set('procAgent1First')}
+                  placeholder="First name"
+                />
+                <InputGroup
+                  label="Agent 1 Last"
+                  value={inputs.procAgent1Last}
+                  onChange={set('procAgent1Last')}
+                  placeholder="Last name"
+                />
+                <InputGroup
+                  label="Agent 2 First"
+                  value={inputs.procAgent2First}
+                  onChange={set('procAgent2First')}
+                  placeholder="First name"
+                />
+                <InputGroup
+                  label="Agent 2 Last"
+                  value={inputs.procAgent2Last}
+                  onChange={set('procAgent2Last')}
+                  placeholder="Last name"
+                />
+              </div>
             </div>
           </div>
         </div>
