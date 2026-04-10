@@ -441,7 +441,7 @@ export function LeaseCalculator({
                   label="Space Type"
                   value={inputs.spaceType}
                   onChange={set('spaceType')}
-                  options={['', 'New Lease', 'Renewal', 'Sublease', 'Expansion', 'Renewal Expansion', 'Owner-User', 'Built-to-Suit']}
+                  options={['', 'Direct-New', 'Renewal', 'Sublease', 'Expansion', 'Renewal Expansion', 'Owner-User', 'Built-to-Suit']}
                 />
                 <InputGroup
                   label="Leased SF"
