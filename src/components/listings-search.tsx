@@ -78,8 +78,8 @@ function normalizeAir(row: Record<string, string | null | number>): UnifiedListi
     parking_spaces: (row.parking_spaces as string) ?? null,
     parking_ratio: (row.parking_ratio as string) ?? null,
     yard_space: (row.yard as string) ?? null,
-    rate_per_sf: (row.rate_sf as string) ?? null,
-    rent_type: null,
+    rate_per_sf: cleanAirRate((row.rate_sf as string) ?? null),
+    rent_type: extractAirRentType((row.type as string) ?? null, (row.rate_sf as string) ?? null),
     sale_price_per_sf: (row.price_sf as string) ?? null,
     total_sale_price: (row.total_price as string) ?? null,
     highlights: (row.highlights as string) ?? null,
@@ -93,6 +93,30 @@ function normalizeAir(row: Record<string, string | null | number>): UnifiedListi
     created_at: (row.created_at as string) ?? null,
     updated_at: (row.updated_at as string) ?? null,
   };
+}
+
+// AIR Hot Sheet "Type" column contains values like "For Lease NNN" or "For Lease MG".
+// Rate/SF can also carry a suffix like "1.25 NNN". Parse rent type from either field.
+const RENT_TYPE_RE = /\b(NNN|FSG|MG|IG|G|Net|Gross|Modified)\b/i;
+
+function extractAirRentType(typeCol: string | null, rateSf: string | null): string | null {
+  for (const src of [typeCol, rateSf]) {
+    const m = src?.match(RENT_TYPE_RE);
+    if (m) {
+      const v = m[1].toUpperCase();
+      if (v === 'NET') return 'NNN';
+      if (v === 'GROSS') return 'G';
+      if (v === 'MODIFIED') return 'MG';
+      return v;
+    }
+  }
+  return null;
+}
+
+// Strip rent type suffix from rate value so "1.25 NNN" → "1.25"
+function cleanAirRate(rate: string | null): string | null {
+  if (!rate?.trim()) return null;
+  return rate.replace(RENT_TYPE_RE, '').trim() || null;
 }
 
 function sortByDate(a: UnifiedListing, b: UnifiedListing): number {
