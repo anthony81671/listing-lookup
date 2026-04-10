@@ -68,6 +68,8 @@ export interface CalcInputs {
   rail: string;
   construction: string;
   multiTenant: string;
+  pol: string;
+  spaceType: string;
   brochureLink: string;
   // Transaction type
   transactionType: 'lease' | 'sale';

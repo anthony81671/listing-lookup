@@ -35,6 +35,8 @@ const DEFAULT_INPUTS: CalcInputs = {
   rail: '',
   construction: '',
   multiTenant: '',
+  pol: '',
+  spaceType: '',
   brochureLink: '',
   transactionType: 'lease',
   lessor: '',
@@ -434,9 +436,15 @@ export function LeaseCalculator({
           <div>
             <SectionHeader icon={DollarSign} title="Lease Financials" />
             <div className="space-y-2">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <SelectGroup
+                  label="Space Type"
+                  value={inputs.spaceType}
+                  onChange={set('spaceType')}
+                  options={['', 'New Lease', 'Renewal', 'Sublease', 'Expansion', 'Renewal Expansion', 'Owner-User', 'Built-to-Suit']}
+                />
                 <InputGroup
-                  label="Size (SF)"
+                  label="Leased SF"
                   value={inputs.sqFt}
                   onChange={set('sqFt')}
                   placeholder="e.g. 50000"
@@ -637,8 +645,8 @@ export function LeaseCalculator({
             />
           </div>
 
-          {/* Row 4 — Construction / Multi-Tenant / Brochure Link */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {/* Row 4 — Construction / Multi-Tenant / POL / Brochure Link */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <SelectGroup
               label="Construction"
               value={inputs.construction}
@@ -649,6 +657,12 @@ export function LeaseCalculator({
               label="Multi-Tenant"
               value={inputs.multiTenant}
               onChange={set('multiTenant')}
+              options={['', 'Y', 'N']}
+            />
+            <SelectGroup
+              label="POL"
+              value={inputs.pol}
+              onChange={set('pol')}
               options={['', 'Y', 'N']}
             />
             <div className="md:col-span-2">
