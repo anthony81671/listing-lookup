@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnifiedListing } from '@/types';
-import { Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { PropertyBanner } from '@/components/property-banner';
 
 const PAGE_SIZE = 25;
@@ -148,6 +148,102 @@ function fmtRate(val: string | null | undefined) {
   return `$${val}`;
 }
 
+// ---- Property Lookup Panel ----
+
+type LookupResults = {
+  ihLease: any[]; ihSale: any[]; ils: any[];
+  airComps: any[]; airProps: any[]; airList: any[];
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  'IH Lease': 'bg-emerald-100 text-emerald-800',
+  'IH Sale':  'bg-amber-100 text-amber-800',
+  'ILS':      'bg-indigo-100 text-indigo-700',
+  'AIR Comp': 'bg-purple-100 text-purple-800',
+  'AIR Prop': 'bg-slate-100 text-slate-600',
+  'AIR List': 'bg-orange-100 text-orange-700',
+};
+
+function fmtCurrency(v: any) {
+  if (v == null || v === '') return '';
+  const n = Number(String(v).replace(/[$,]/g, ''));
+  return isNaN(n) ? String(v) : `$${n.toFixed(2)}`;
+}
+function fmtLookupNum(v: any) {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  return isNaN(n) ? String(v) : n.toLocaleString();
+}
+function fmtDate(v: string | null | undefined) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return v;
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`;
+}
+
+function buildUnifiedRows(r: LookupResults) {
+  type Row = { source: string; address: string; city: string; sf: string; rate: string; type: string; date: string; party: string; _raw: any; _src: keyof LookupResults };
+  const rows: Row[] = [];
+  const addr = (x: any) => [x.streetnumber1, x.streetdirection, x.streetname, x.streetsuffix].filter(Boolean).join(' ')
+    || [x.street_number1, x.street_direction, x.street_name, x.street_suffix].filter(Boolean).join(' ')
+    || x.address_full || x.address || '';
+
+  for (const x of r.ihLease) rows.push({ source: 'IH Lease', address: addr(x), city: x.city ?? '', sf: fmtLookupNum(x.leasedsqft), rate: fmtCurrency(x.rentpersqft), type: x.renttype ?? '', date: fmtDate(x.transactiondate), party: x.lessee ?? '', _raw: x, _src: 'ihLease' });
+  for (const x of r.ihSale)  rows.push({ source: 'IH Sale',  address: addr(x), city: x.city ?? '', sf: fmtLookupNum(x.buildingsqft), rate: fmtCurrency(x.salepricepersqft), type: 'Sale', date: fmtDate(x.transactiondate), party: x.buyer ?? '', _raw: x, _src: 'ihSale' });
+  for (const x of r.ils)     rows.push({ source: 'ILS',      address: x.address ?? addr(x), city: x.city ?? '', sf: fmtLookupNum(x.sq_ft), rate: fmtCurrency(x.rate), type: x.rent_type ?? '', date: fmtDate(x.date), party: x.company_agent ?? '', _raw: x, _src: 'ils' });
+  for (const x of r.airComps) rows.push({ source: 'AIR Comp', address: x.address_full ?? addr(x), city: x.city ?? '', sf: fmtLookupNum(x.building_sf), rate: fmtCurrency(x.leased_rate || x.price_per_sf), type: x.lease_type ?? '', date: fmtDate(x.lease_signed_date), party: x.primary_agent ?? '', _raw: x, _src: 'airComps' });
+  for (const x of r.airProps) rows.push({ source: 'AIR Prop', address: x.address ?? addr(x), city: x.city ?? '', sf: fmtLookupNum(x.building_sf), rate: '', type: '', date: '', party: '', _raw: x, _src: 'airProps' });
+  for (const x of r.airList)  rows.push({ source: 'AIR List', address: x.address ?? addr(x), city: x.city ?? '', sf: fmtLookupNum(x.available_sf), rate: fmtCurrency(x.rate_sf), type: x.rent_type ?? '', date: fmtDate(x.date), party: x.company_agent ?? '', _raw: x, _src: 'airList' });
+  return rows;
+}
+
+function LookupTable({ rows, activeTab, onRowClick }: { rows: ReturnType<typeof buildUnifiedRows>; activeTab: string; onRowClick: (row: ReturnType<typeof buildUnifiedRows>[number]) => void }) {
+  const filtered = activeTab === 'all' ? rows : rows.filter(r => {
+    if (activeTab === 'ihLease') return r._src === 'ihLease';
+    if (activeTab === 'ihSale')  return r._src === 'ihSale';
+    if (activeTab === 'ils')     return r._src === 'ils';
+    if (activeTab === 'airComps') return r._src === 'airComps';
+    if (activeTab === 'airProps') return r._src === 'airProps';
+    if (activeTab === 'airList')  return r._src === 'airList';
+    return true;
+  });
+  if (!filtered.length) return <div className="py-6 text-center text-sm text-slate-400">No records found.</div>;
+  return (
+    <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
+      <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-slate-50 border-b border-slate-200">
+          <tr>
+            <th className="px-3 py-2 text-left font-semibold text-slate-500">Source</th>
+            <th className="px-3 py-2 text-left font-semibold text-slate-500">Address</th>
+            <th className="px-3 py-2 text-left font-semibold text-slate-500">City</th>
+            <th className="px-3 py-2 text-right font-semibold text-slate-500">SF</th>
+            <th className="px-3 py-2 text-right font-semibold text-slate-500">Rate</th>
+            <th className="px-3 py-2 font-semibold text-slate-500">Type</th>
+            <th className="px-3 py-2 font-semibold text-slate-500">Date</th>
+            <th className="px-3 py-2 font-semibold text-slate-500">Party</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {filtered.map((r, i) => (
+            <tr key={i} className="hover:bg-slate-50 cursor-pointer" onClick={() => onRowClick(r)}>
+              <td className="px-3 py-1.5">
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap ${SOURCE_COLORS[r.source] ?? ''}`}>{r.source}</span>
+              </td>
+              <td className="px-3 py-1.5 font-medium text-slate-800 whitespace-nowrap">{r.address || '—'}</td>
+              <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{r.city || '—'}</td>
+              <td className="px-3 py-1.5 text-right text-slate-600 whitespace-nowrap">{r.sf || '—'}</td>
+              <td className="px-3 py-1.5 text-right font-semibold text-blue-600 whitespace-nowrap">{r.rate || '—'}</td>
+              <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap">{r.type || '—'}</td>
+              <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap">{r.date || '—'}</td>
+              <td className="px-3 py-1.5 text-slate-600 whitespace-nowrap max-w-[200px] truncate">{r.party || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ---- Main Component ----
 
 export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: UnifiedListing) => void }) {
@@ -163,6 +259,12 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UnifiedListing | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Property lookup panel state
+  const [lookupResults, setLookupResults] = useState<LookupResults | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupAddress, setLookupAddress] = useState('');
+  const [lookupTab, setLookupTab] = useState('all');
 
   useEffect(() => {
     Promise.all([
@@ -234,6 +336,49 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
 
   const handleSearch = () => { setHasSearched(true); setPage(1); load(); };
 
+  // Address-based property lookup across all tables
+  const handleAddressLookup = useCallback(async () => {
+    if (!streetNumber.trim() && !streetName.trim()) return;
+    setLookupLoading(true);
+    setLookupResults(null);
+    setLookupTab('all');
+    setLookupAddress([streetNumber, streetName].filter(Boolean).join(' '));
+    const db = supabase as any;
+
+    const q = (table: string, nameCol: string, useStNum: boolean) => {
+      let qb = db.from(table).select('*').limit(50);
+      if (streetName.trim()) qb = qb.ilike(nameCol, `%${streetName.trim()}%`);
+      if (streetNumber.trim() && useStNum) {
+        const sn = parseInt(streetNumber.trim(), 10);
+        if (!isNaN(sn)) qb = qb.lte('st_num_low', sn).gte('st_num_high', sn);
+      } else if (streetNumber.trim()) {
+        qb = qb.ilike('address', `${streetNumber.trim()}%`);
+      }
+      return qb;
+    };
+
+    const [ih1, ih2, ils, ac, ap, al] = await Promise.allSettled([
+      q('ihlease', 'streetname', true).order('transactiondate', { ascending: false }),
+      q('ihsale',  'streetname', true).order('transactiondate', { ascending: false }),
+      q('ils',     'street_name', true).order('date', { ascending: false }),
+      db.from('aircomps').select('*').ilike('street_name', `%${streetName.trim()}%`).limit(50).order('lease_signed_date', { ascending: false }),
+      q('air_properties', 'street_name', true).order('created_at', { ascending: false }),
+      q('air_listings',   'street_name', true).order('date', { ascending: false }),
+    ]);
+
+    const ext = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' && r.value.data ? r.value.data : [];
+    setLookupResults({ ihLease: ext(ih1), ihSale: ext(ih2), ils: ext(ils), airComps: ext(ac), airProps: ext(ap), airList: ext(al) });
+    setLookupLoading(false);
+  }, [streetNumber, streetName]);
+
+  const clearAll = () => {
+    setQuery(''); setStreetNumber(''); setStreetName('');
+    setSourceFilter('all'); setCityFilter('');
+    setAllListings([]); setSelected(null);
+    setHasSearched(false); setPage(1);
+    setLookupResults(null); setLookupAddress('');
+  };
+
   const total = allListings.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const listings = allListings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -242,44 +387,55 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
   const btnBlue = 'px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap';
   const btnSlate = 'px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm whitespace-nowrap';
 
+  // Lookup tab counts
+  const lkCounts = lookupResults ? {
+    all: lookupResults.ihLease.length + lookupResults.ihSale.length + lookupResults.ils.length + lookupResults.airComps.length + lookupResults.airProps.length + lookupResults.airList.length,
+    ihLease: lookupResults.ihLease.length, ihSale: lookupResults.ihSale.length,
+    ils: lookupResults.ils.length, airComps: lookupResults.airComps.length,
+    airProps: lookupResults.airProps.length, airList: lookupResults.airList.length,
+  } : null;
+
+  const TABS = [
+    { key: 'all', label: 'All' }, { key: 'ihLease', label: 'IH Lease' }, { key: 'ihSale', label: 'IH Sale' },
+    { key: 'ils', label: 'ILS' }, { key: 'airComps', label: 'AIR Comps' },
+    { key: 'airProps', label: 'AIR Props' }, { key: 'airList', label: 'AIR List' },
+  ];
+
   return (
     <div className="space-y-4">
       {/* Search Bar */}
       <Card className="px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
+          {/* Listing # quick search */}
           <div className="flex-shrink-0">
-            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Quick Search</label>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Listing #</label>
             <div className="flex gap-1.5">
               <div className="relative">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input type="text" value={query}
-                  onChange={(e) => { setQuery(e.target.value); setStreetNumber(''); setStreetName(''); }}
+                  onChange={(e) => { setQuery(e.target.value); setStreetNumber(''); setStreetName(''); setLookupResults(null); }}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="Address, listing #, agent..."
-                  className={`w-56 pl-8 ${inputCls}`} />
+                  placeholder="ILS / AIR / IH #"
+                  className={`w-44 pl-8 ${inputCls}`} />
               </div>
-              <button onClick={handleSearch} className={btnBlue}>Search</button>
-              {query && (
-                <button onClick={() => setQuery('')} className="px-2 py-2 text-slate-400 hover:text-red-500 transition-colors">
-                  <X size={16} />
-                </button>
-              )}
+              <button onClick={handleSearch} className={btnBlue}>Lookup</button>
             </div>
           </div>
 
           <div className="text-slate-300 self-center pb-1">|</div>
 
+          {/* Address lookup → shows property lookup panel */}
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Address Search</label>
             <div className="flex gap-1.5">
               <input type="text" value={streetNumber}
                 onChange={(e) => { setStreetNumber(e.target.value); setQuery(''); }}
-                placeholder="St #" className={`w-20 ${inputCls}`} />
+                placeholder="500" className={`w-20 ${inputCls}`} />
               <input type="text" value={streetName}
                 onChange={(e) => { setStreetName(e.target.value); setQuery(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Street Name" className={`w-40 ${inputCls}`} />
-              <button onClick={handleSearch} className={btnSlate}>Search</button>
+                onKeyDown={(e) => e.key === 'Enter' && handleAddressLookup()}
+                placeholder="Street Name" className={`w-44 ${inputCls}`} />
+              <button onClick={handleAddressLookup} className={btnSlate}>Search</button>
             </div>
           </div>
 
@@ -305,28 +461,67 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
             </select>
           </div>
 
-          {(query || streetNumber || streetName || cityFilter || sourceFilter !== 'all') && (
+          {(query || streetNumber || streetName || cityFilter || sourceFilter !== 'all' || lookupResults) && (
             <div className="flex-shrink-0 self-end">
-              <button
-                onClick={() => {
-                  setQuery('');
-                  setStreetNumber('');
-                  setStreetName('');
-                  setSourceFilter('all');
-                  setCityFilter('');
-                  setAllListings([]);
-                  setSelected(null);
-                  setHasSearched(false);
-                  setPage(1);
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-500 border border-slate-200 rounded-lg bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-              >
+              <button onClick={clearAll} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-500 border border-slate-200 rounded-lg bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
                 <X size={14} /> Clear
               </button>
             </div>
           )}
         </div>
       </Card>
+
+      {/* Property Lookup Panel */}
+      {(lookupLoading || lookupResults) && (
+        <Card className="overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 border-b bg-slate-50">
+            <div className="text-sm font-medium">
+              Property Lookup: <span className="text-blue-600">{lookupAddress}</span>
+              {lkCounts && <span className="text-slate-400 ml-2">— {lkCounts.all} record{lkCounts.all !== 1 ? 's' : ''} found</span>}
+            </div>
+            <button onClick={() => { setLookupResults(null); setLookupAddress(''); }} className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700">
+              <X size={15} />
+            </button>
+          </div>
+
+          {lookupLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+              <Loader2 size={16} className="animate-spin" /> Searching all databases...
+            </div>
+          ) : lookupResults && (
+            <>
+              {/* Tabs */}
+              <div className="flex gap-1 px-3 pt-2 pb-0 border-b border-slate-100 overflow-x-auto">
+                {TABS.map(({ key, label }) => {
+                  const count = lkCounts ? lkCounts[key as keyof typeof lkCounts] : 0;
+                  return (
+                    <button key={key} onClick={() => setLookupTab(key)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-t-md whitespace-nowrap border-b-2 transition-colors ${lookupTab === key ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+                      {label}
+                      <span className={`text-[10px] rounded-full px-1.5 py-0.5 min-w-[18px] text-center font-semibold ${count > 0 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Table */}
+              <LookupTable
+                rows={buildUnifiedRows(lookupResults)}
+                activeTab={lookupTab}
+                onRowClick={(row) => {
+                  // For ILS/AIR List rows, convert to UnifiedListing and show PropertyBanner
+                  if (row._src === 'ils') {
+                    setSelected(normalizeIls(row._raw));
+                  } else if (row._src === 'airList') {
+                    setSelected(normalizeAir(row._raw));
+                  }
+                  // IH Lease/Sale/AIR Comps/Props don't map to UnifiedListing — just select nothing
+                }}
+              />
+            </>
+          )}
+        </Card>
+      )}
 
       {/* Error */}
       {error && (
@@ -344,20 +539,22 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
         />
       )}
 
-      {/* Results count */}
-      <div className="flex items-center justify-between px-1">
-        <span className="text-sm font-medium text-slate-500">
-          {loading ? 'Loading...' : hasSearched ? `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}${total >= FETCH_LIMIT * (sourceFilter === 'all' ? 2 : 1) ? '+' : ''}` : ''}
-        </span>
-        {totalPages > 1 && (
-          <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-            Page {page} of {totalPages}
+      {/* Results count — only shown for listing # search */}
+      {!lookupResults && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-sm font-medium text-slate-500">
+            {loading ? 'Loading...' : hasSearched ? `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}${total >= FETCH_LIMIT * (sourceFilter === 'all' ? 2 : 1) ? '+' : ''}` : ''}
           </span>
-        )}
-      </div>
+          {totalPages > 1 && (
+            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+              Page {page} of {totalPages}
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* Table */}
-      <Card className="p-0 overflow-hidden">
+      {/* Table — hidden when lookup panel is active */}
+      {!lookupResults && (<Card className="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-100 text-slate-500 font-semibold uppercase text-xs">
@@ -435,10 +632,10 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
             </tbody>
           </table>
         </div>
-      </Card>
+      </Card>)}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!lookupResults && totalPages > 1 && (
         <div className="flex items-center justify-center gap-1.5">
           <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
             className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
