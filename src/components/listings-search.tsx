@@ -6,6 +6,107 @@ import type { UnifiedListing } from '@/types';
 import { Search, X, ChevronLeft, ChevronRight, ExternalLink, Building2, MessageSquareQuote } from 'lucide-react';
 
 const PAGE_SIZE = 25;
+const FETCH_LIMIT = 300; // per table
+
+// ---- Normalizers ----
+
+function normalizeIls(row: Record<string, string | null | number>): UnifiedListing {
+  return {
+    report_id: Number(row.id),
+    source: 'ILS',
+    listing_number: (row.ils_number as string) ?? null,
+    listing_date: (row.date as string) ?? null,
+    street_address: (row.address as string) ?? null,
+    suite: (row.suite_bldg as string) ?? null,
+    city: (row.city as string) ?? null,
+    state: 'CA',
+    market: (row.market as string) ?? null,
+    submarket: (row.submarket as string) ?? null,
+    property_name: (row.business_park as string) ?? null,
+    building_sqft: (row.sq_ft as string) ?? null,
+    available_sqft: (row.sq_ft as string) ?? null, // ILS lists full available building
+    office_sqft: (row.office_sf as string) ?? null,
+    clear_height: (row.clear_ht as string) ?? null,
+    dh_doors: (row.dh as string) ?? null,
+    gl_doors: (row.gl as string) ?? null,
+    sprinklers: (row.sprklr as string) ?? null,
+    rail_access: (row.rail as string) ?? null,
+    amperage: (row.amps as string) ?? null,
+    parking_spaces: (row.parking as string) ?? null,
+    parking_ratio: null,
+    yard_space: (row.yard as string) ?? null,
+    rate_per_sf: (row.rate as string) ?? null,
+    rent_type: (row.rent_type as string) ?? null,
+    sale_price_per_sf: (row.sale_price_sf as string) ?? null,
+    total_sale_price: (row.sale_price as string) ?? null,
+    highlights: (row.listing_highlights as string) ?? null,
+    comments: (row.listing_comment as string) ?? null,
+    company_agent: (row.company_agent as string) ?? null,
+    listing_status: (row.status as string) ?? null,
+    photo_url: (row.photo_url as string) ?? null,
+    pdf_url: (row.pdf_url as string) ?? null,
+    property_link: null,
+    marketing_flyer: null,
+    created_at: (row.created_at as string) ?? null,
+    updated_at: (row.updated_at as string) ?? null,
+  };
+}
+
+function normalizeAir(row: Record<string, string | null | number>): UnifiedListing {
+  return {
+    report_id: Number(row.id) + 1_000_000, // offset to avoid key collision with ILS
+    source: 'AIR',
+    listing_number: (row.listing_number as string) ?? null,
+    listing_date: (row.date as string) ?? null,
+    street_address: (row.address as string) ?? null,
+    suite: (row.suite_bldg as string) ?? null,
+    city: (row.city as string) ?? null,
+    state: (row.state as string) ?? 'CA',
+    market: (row.market as string) ?? null,
+    submarket: (row.submarket as string) ?? null,
+    property_name: (row.business_park as string) ?? null,
+    building_sqft: (row.building_sf as string) ?? null,
+    available_sqft: (row.available_sf as string) ?? null,
+    office_sqft: (row.office_sf as string) ?? null,
+    clear_height: (row.clear_height as string) ?? null,
+    dh_doors: (row.dh as string) ?? null,
+    gl_doors: (row.gl as string) ?? null,
+    sprinklers: (row.sprinkler as string) ?? null,
+    rail_access: (row.rail as string) ?? null,
+    amperage: (row.amps as string) ?? null,
+    parking_spaces: (row.parking_spaces as string) ?? null,
+    parking_ratio: (row.parking_ratio as string) ?? null,
+    yard_space: (row.yard as string) ?? null,
+    rate_per_sf: (row.rate_sf as string) ?? null,
+    rent_type: null,
+    sale_price_per_sf: (row.price_sf as string) ?? null,
+    total_sale_price: (row.total_price as string) ?? null,
+    highlights: (row.highlights as string) ?? null,
+    comments: (row.notes as string) ?? null,
+    company_agent: (row.company_agent as string) ?? null,
+    listing_status: (row.status as string) ?? null,
+    photo_url: null,
+    pdf_url: null,
+    property_link: (row.property_link as string) ?? null,
+    marketing_flyer: (row.marketing_flyer as string) ?? null,
+    created_at: (row.created_at as string) ?? null,
+    updated_at: (row.updated_at as string) ?? null,
+  };
+}
+
+function sortByDate(a: UnifiedListing, b: UnifiedListing): number {
+  const da = a.listing_date ? new Date(a.listing_date).getTime() : 0;
+  const db = b.listing_date ? new Date(b.listing_date).getTime() : 0;
+  return db - da;
+}
+
+// ---- Sub-components ----
+
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
+    {children}
+  </div>
+);
 
 function fmt(val: string | null | undefined, fallback = '—') {
   if (!val || val.trim() === '') return fallback;
@@ -19,14 +120,6 @@ function fmtNum(val: string | null | undefined) {
   return n.toLocaleString();
 }
 
-// ---- Sub-components (match LeaseAnalyzer style exactly) ----
-
-const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
-    {children}
-  </div>
-);
-
 const DetailItem = ({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) => (
   <div className={`p-3 rounded-lg ${highlight ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 border border-slate-200'}`}>
     <div className="text-xs font-bold text-slate-500 uppercase mb-1">{label}</div>
@@ -34,131 +127,89 @@ const DetailItem = ({ label, value, highlight = false }: { label: string; value:
   </div>
 );
 
-// ---- Building Detail Modal (matches BuildingInfoModal) ----
-const ListingModal = ({ listing, onClose }: { listing: UnifiedListing; onClose: () => void }) => {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-2xl">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            <X size={24} />
-          </button>
-          <div className="pr-12">
-            {listing.property_name && (
-              <h2 className="text-2xl font-bold mb-1">{listing.property_name}</h2>
-            )}
-            <p className="text-blue-100 text-lg font-medium">{listing.street_address}</p>
-            <p className="text-blue-200 text-sm mt-1">
-              {[listing.city, listing.state].filter(Boolean).join(', ')}
-            </p>
-            {listing.listing_status && (
-              <div className="mt-3 inline-block">
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-400 text-blue-900">
-                  {listing.listing_status}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-6 space-y-6">
-          {/* Property Details */}
-          <div>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Building2 size={20} className="text-blue-600" />
-              Property Details
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <DetailItem label="Bldg SF" value={fmtNum(listing.building_sqft)} />
-              <DetailItem label="Available SF" value={fmtNum(listing.available_sqft)} />
-              <DetailItem label="Office SF" value={fmtNum(listing.office_sqft)} />
-              <DetailItem label="Rate / SF" value={listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—'} highlight />
-              <DetailItem label="Rent Type" value={fmt(listing.rent_type)} />
-              <DetailItem label="Sale / SF" value={listing.sale_price_per_sf ? `$${listing.sale_price_per_sf}` : '—'} />
-              <DetailItem label="DH / GL Doors" value={`${fmt(listing.dh_doors, '0')} / ${fmt(listing.gl_doors, '0')}`} />
-              <DetailItem label="Clear Height" value={fmt(listing.clear_height)} />
-              <DetailItem label="Amps" value={fmt(listing.amperage)} />
-              <DetailItem label="Sprinklers" value={fmt(listing.sprinklers)} />
-              <DetailItem label="Rail Access" value={fmt(listing.rail_access)} />
-              <DetailItem label="Yard" value={fmt(listing.yard_space)} />
-              <DetailItem label="Parking Spaces" value={fmt(listing.parking_spaces)} />
-              <DetailItem label="Parking Ratio" value={fmt(listing.parking_ratio)} />
-              <DetailItem label="Source / Listing #" value={`${listing.source} ${listing.listing_number ? `#${listing.listing_number}` : ''}`.trim()} highlight />
-            </div>
-          </div>
-
-          {/* Notes */}
-          {(listing.highlights || listing.comments) && (
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
-                <MessageSquareQuote size={20} className="text-blue-600" />
-                Notes
-              </h3>
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
-                {listing.highlights && <p className="text-slate-800 text-sm font-medium whitespace-pre-wrap">{listing.highlights}</p>}
-                {listing.comments && <p className="text-slate-600 text-sm whitespace-pre-wrap">{listing.comments}</p>}
-              </div>
-            </div>
-          )}
-
-          {/* Agent */}
-          {listing.company_agent && (
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-3">Agent Information</h3>
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <p className="text-slate-700 text-sm whitespace-pre-line">{listing.company_agent}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Links */}
-          {(listing.property_link || listing.marketing_flyer || listing.pdf_url) && (
-            <div className="flex gap-3 pt-4 border-t border-slate-200">
-              {listing.property_link && (
-                <a
-                  href={listing.property_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-                >
-                  <ExternalLink size={16} />Property Link
-                </a>
-              )}
-              {listing.marketing_flyer && (
-                <a
-                  href={listing.marketing_flyer}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm"
-                >
-                  <ExternalLink size={16} />Marketing Flyer
-                </a>
-              )}
-              {listing.pdf_url && (
-                <a
-                  href={listing.pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition-colors font-medium text-sm"
-                >
-                  <ExternalLink size={16} />PDF Brochure
-                </a>
-              )}
+const ListingModal = ({ listing, onClose }: { listing: UnifiedListing; onClose: () => void }) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-2xl">
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-lg transition-colors">
+          <X size={24} />
+        </button>
+        <div className="pr-12">
+          {listing.property_name && <h2 className="text-2xl font-bold mb-1">{listing.property_name}</h2>}
+          <p className="text-blue-100 text-lg font-medium">{listing.street_address}</p>
+          <p className="text-blue-200 text-sm mt-1">{[listing.city, listing.state].filter(Boolean).join(', ')}</p>
+          {listing.listing_status && (
+            <div className="mt-3 inline-block">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-400 text-blue-900">{listing.listing_status}</span>
             </div>
           )}
         </div>
       </div>
+      <div className="p-6 space-y-6">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <Building2 size={20} className="text-blue-600" />Property Details
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <DetailItem label="Bldg SF" value={fmtNum(listing.building_sqft)} />
+            <DetailItem label="Available SF" value={fmtNum(listing.available_sqft)} />
+            <DetailItem label="Office SF" value={fmtNum(listing.office_sqft)} />
+            <DetailItem label="Rate / SF" value={listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—'} highlight />
+            <DetailItem label="Rent Type" value={fmt(listing.rent_type)} />
+            <DetailItem label="Sale / SF" value={listing.sale_price_per_sf ? `$${listing.sale_price_per_sf}` : '—'} />
+            <DetailItem label="DH / GL Doors" value={`${fmt(listing.dh_doors, '0')} / ${fmt(listing.gl_doors, '0')}`} />
+            <DetailItem label="Clear Height" value={fmt(listing.clear_height)} />
+            <DetailItem label="Amps" value={fmt(listing.amperage)} />
+            <DetailItem label="Sprinklers" value={fmt(listing.sprinklers)} />
+            <DetailItem label="Rail Access" value={fmt(listing.rail_access)} />
+            <DetailItem label="Yard" value={fmt(listing.yard_space)} />
+            <DetailItem label="Parking" value={fmt(listing.parking_spaces)} />
+            <DetailItem label="Parking Ratio" value={fmt(listing.parking_ratio)} />
+            <DetailItem label="Source / #" value={`${listing.source}${listing.listing_number ? ` #${listing.listing_number}` : ''}`} highlight />
+          </div>
+        </div>
+        {(listing.highlights || listing.comments) && (
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+              <MessageSquareQuote size={20} className="text-blue-600" />Notes
+            </h3>
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
+              {listing.highlights && <p className="text-slate-800 text-sm font-medium whitespace-pre-wrap">{listing.highlights}</p>}
+              {listing.comments && <p className="text-slate-600 text-sm whitespace-pre-wrap">{listing.comments}</p>}
+            </div>
+          </div>
+        )}
+        {listing.company_agent && (
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Agent Information</h3>
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+              <p className="text-slate-700 text-sm whitespace-pre-line">{listing.company_agent}</p>
+            </div>
+          </div>
+        )}
+        {(listing.property_link || listing.marketing_flyer || listing.pdf_url) && (
+          <div className="flex gap-3 pt-4 border-t border-slate-200">
+            {listing.property_link && (
+              <a href={listing.property_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
+                <ExternalLink size={16} />Property Link
+              </a>
+            )}
+            {listing.marketing_flyer && (
+              <a href={listing.marketing_flyer} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm">
+                <ExternalLink size={16} />Marketing Flyer
+              </a>
+            )}
+            {listing.pdf_url && (
+              <a href={listing.pdf_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition-colors font-medium text-sm">
+                <ExternalLink size={16} />PDF
+              </a>
+            )}
+          </div>
+        )}
+      </div>
     </div>
-  );
-};
+  </div>
+);
 
 // ---- Main Component ----
 
@@ -168,64 +219,72 @@ export function ListingsSearch() {
   const [streetName, setStreetName] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'ILS' | 'AIR'>('all');
   const [cityFilter, setCityFilter] = useState('');
-  const [listings, setListings] = useState<UnifiedListing[]>([]);
+  const [allListings, setAllListings] = useState<UnifiedListing[]>([]);
   const [cities, setCities] = useState<string[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UnifiedListing | null>(null);
 
-  // vw_unified_listing_report is a view not in generated types — cast to bypass
-  const db = supabase as any;
-
-  // Load city list once
+  // Load city list from both tables once
   useEffect(() => {
-    db
-      .from('vw_unified_listing_report')
-      .select('city')
-      .neq('city', null)
-      .then(({ data }: { data: { city: string | null }[] | null }) => {
-        if (!data) return;
-        const unique = Array.from(new Set(data.map((r) => r.city).filter(Boolean) as string[])).sort();
-        setCities(unique);
-      });
+    Promise.all([
+      supabase.from('ils').select('city').neq('city', null),
+      supabase.from('air_listings').select('city').neq('city', null),
+    ]).then(([ils, air]) => {
+      const all = [
+        ...(ils.data ?? []).map((r: { city: string | null }) => r.city),
+        ...(air.data ?? []).map((r: { city: string | null }) => r.city),
+      ].filter(Boolean) as string[];
+      setCities(Array.from(new Set(all)).sort());
+    });
   }, []);
 
-  const load = useCallback(async (p: number) => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const from = (p - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
 
-    let q = db
-      .from('vw_unified_listing_report')
-      .select('*', { count: 'exact' })
-      .order('listing_date', { ascending: false, nullsFirst: false })
-      .range(from, to);
+    const db = supabase as any;
 
-    if (sourceFilter !== 'all') q = q.eq('source', sourceFilter);
-    if (cityFilter) q = q.eq('city', cityFilter);
-
-    if (streetNumber || streetName) {
-      if (streetNumber) q = q.ilike('street_address', `${streetNumber}%`);
-      if (streetName) q = q.ilike('street_address', `%${streetName}%`);
-    } else if (query.trim()) {
+    const buildIlsQuery = () => {
       const t = query.trim();
-      q = q.or(
-        `street_address.ilike.%${t}%,listing_number.ilike.%${t}%,company_agent.ilike.%${t}%,property_name.ilike.%${t}%`
-      );
+      let q = db.from('ils').select('*').order('date', { ascending: false, nullsFirst: false }).limit(FETCH_LIMIT);
+      if (cityFilter) q = q.eq('city', cityFilter);
+      if (streetNumber) q = q.ilike('address', `${streetNumber}%`);
+      if (streetName) q = q.ilike('address', `%${streetName}%`);
+      if (!streetNumber && !streetName && t) q = q.or(`address.ilike.%${t}%,ils_number.ilike.%${t}%,company_agent.ilike.%${t}%,business_park.ilike.%${t}%`);
+      return q;
+    };
+
+    const buildAirQuery = () => {
+      const t = query.trim();
+      let q = db.from('air_listings').select('*').order('date', { ascending: false, nullsFirst: false }).limit(FETCH_LIMIT);
+      if (cityFilter) q = q.eq('city', cityFilter);
+      if (streetNumber) q = q.ilike('address', `${streetNumber}%`);
+      if (streetName) q = q.ilike('address', `%${streetName}%`);
+      if (!streetNumber && !streetName && t) q = q.or(`address.ilike.%${t}%,listing_number.ilike.%${t}%,company_agent.ilike.%${t}%,business_park.ilike.%${t}%`);
+      return q;
+    };
+
+    try {
+      const [ilsResult, airResult] = await Promise.all([
+        sourceFilter !== 'AIR' ? buildIlsQuery() : Promise.resolve({ data: [], error: null }),
+        sourceFilter !== 'ILS' ? buildAirQuery() : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (ilsResult.error) { setError(ilsResult.error.message); setLoading(false); return; }
+      if (airResult.error) { setError(airResult.error.message); setLoading(false); return; }
+
+      const merged: UnifiedListing[] = [
+        ...(ilsResult.data ?? []).map((r: any) => normalizeIls(r)),
+        ...(airResult.data ?? []).map((r: any) => normalizeAir(r)),
+      ].sort(sortByDate);
+
+      setAllListings(merged);
+    } catch (e) {
+      setError((e as Error).message);
     }
 
-    const { data, count, error: qErr } = await q;
-    if (qErr) {
-      setError(qErr.message);
-      setListings([]);
-      setTotal(0);
-    } else if (data) {
-      setListings(data as UnifiedListing[]);
-      setTotal(count ?? data.length);
-    }
     setLoading(false);
   }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
@@ -234,12 +293,14 @@ export function ListingsSearch() {
   }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
   useEffect(() => {
-    load(page);
-  }, [load, page]);
+    load();
+  }, [load]);
 
-  const handleSearch = () => load(1);
+  const handleSearch = () => { setPage(1); load(); };
 
+  const total = allListings.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  const listings = allListings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const inputCls = 'bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2 font-medium outline-none transition-all';
   const btnBlue = 'px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap';
@@ -250,7 +311,6 @@ export function ListingsSearch() {
       {/* Search Bar */}
       <Card className="px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
-          {/* General Search */}
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Quick Search</label>
             <div className="flex gap-1.5">
@@ -276,7 +336,6 @@ export function ListingsSearch() {
 
           <div className="text-slate-300 self-center pb-1">|</div>
 
-          {/* Address Search */}
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Address Search</label>
             <div className="flex gap-1.5">
@@ -301,7 +360,6 @@ export function ListingsSearch() {
 
           <div className="text-slate-300 self-center pb-1">|</div>
 
-          {/* Filters */}
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Source</label>
             <div className="flex bg-slate-100 rounded-lg p-1">
@@ -319,15 +377,9 @@ export function ListingsSearch() {
 
           <div className="flex-shrink-0">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">City</label>
-            <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              className={`w-44 ${inputCls}`}
-            >
+            <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} className={`w-44 ${inputCls}`}>
               <option value="">All Cities</option>
-              {cities.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+              {cities.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -343,7 +395,7 @@ export function ListingsSearch() {
       {/* Results count */}
       <div className="flex items-center justify-between px-1">
         <span className="text-sm font-medium text-slate-500">
-          {loading ? 'Loading...' : `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}`}
+          {loading ? 'Loading...' : `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}${total >= FETCH_LIMIT * (sourceFilter === 'all' ? 2 : 1) ? '+' : ''}`}
         </span>
         {totalPages > 1 && (
           <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -373,16 +425,12 @@ export function ListingsSearch() {
               {listings.length === 0 && !loading ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
-                    No listings found
+                    {error ? 'Could not load listings' : 'No listings found'}
                   </td>
                 </tr>
               ) : (
                 listings.map((l) => (
-                  <tr
-                    key={l.report_id}
-                    className="hover:bg-slate-50 cursor-pointer transition-colors"
-                    onClick={() => setSelected(l)}
-                  >
+                  <tr key={`${l.source}-${l.report_id}`} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setSelected(l)}>
                     <td className="px-4 py-3">
                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.source === 'AIR' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
                         {l.source}
@@ -416,7 +464,7 @@ export function ListingsSearch() {
         <div className="flex items-center justify-center gap-1.5">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1 || loading}
+            disabled={page === 1}
             className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronLeft size={16} />
@@ -431,7 +479,6 @@ export function ListingsSearch() {
               <button
                 key={pg}
                 onClick={() => setPage(pg)}
-                disabled={loading}
                 className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${pg === page ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'}`}
               >
                 {pg}
@@ -440,7 +487,7 @@ export function ListingsSearch() {
           })}
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages || loading}
+            disabled={page === totalPages}
             className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <ChevronRight size={16} />
