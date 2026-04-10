@@ -3,37 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { UnifiedListing } from '@/types';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Search, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { Search, X, ChevronLeft, ChevronRight, ExternalLink, Building2, MessageSquareQuote } from 'lucide-react';
 
 const PAGE_SIZE = 25;
 
-function fmt(val: string | null | undefined, suffix = '') {
-  if (!val || val.trim() === '') return '—';
-  return val + suffix;
+function fmt(val: string | null | undefined, fallback = '—') {
+  if (!val || val.trim() === '') return fallback;
+  return val;
 }
 
 function fmtNum(val: string | null | undefined) {
@@ -43,104 +19,155 @@ function fmtNum(val: string | null | undefined) {
   return n.toLocaleString();
 }
 
-function ListingDetail({ listing }: { listing: UnifiedListing }) {
-  const row = (label: string, value: string | null | undefined) => (
-    <div key={label} className="flex gap-2 py-1 border-b border-slate-100 last:border-0">
-      <span className="w-40 shrink-0 text-xs text-slate-500">{label}</span>
-      <span className="text-sm text-slate-900 font-medium">{fmt(value)}</span>
-    </div>
-  );
+// ---- Sub-components (match LeaseAnalyzer style exactly) ----
 
-  const address = [listing.street_address, listing.suite].filter(Boolean).join(', ');
-  const cityStateZip = [listing.city, listing.state].filter(Boolean).join(', ');
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
+    {children}
+  </div>
+);
 
+const DetailItem = ({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) => (
+  <div className={`p-3 rounded-lg ${highlight ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 border border-slate-200'}`}>
+    <div className="text-xs font-bold text-slate-500 uppercase mb-1">{label}</div>
+    <div className={`text-sm font-semibold ${highlight ? 'text-blue-700' : 'text-slate-800'}`}>{value}</div>
+  </div>
+);
+
+// ---- Building Detail Modal (matches BuildingInfoModal) ----
+const ListingModal = ({ listing, onClose }: { listing: UnifiedListing; onClose: () => void }) => {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-0">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Location</p>
-        {row('Address', address || listing.street_address)}
-        {row('City / State', cityStateZip)}
-        {row('Market', listing.market)}
-        {row('Submarket', listing.submarket)}
-        {row('Property Name', listing.property_name)}
-      </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Listing</p>
-        {row('Source', listing.source)}
-        {row('Listing #', listing.listing_number)}
-        {row('Date', listing.listing_date)}
-        {row('Status', listing.listing_status)}
-        {row('Company / Agent', listing.company_agent)}
-      </div>
-      <div className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Size</p>
-        {row('Building SF', fmtNum(listing.building_sqft))}
-        {row('Available SF', fmtNum(listing.available_sqft))}
-        {row('Office SF', fmtNum(listing.office_sqft))}
-      </div>
-      <div className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Financials</p>
-        {row('Rate / SF', listing.rate_per_sf ? `$${listing.rate_per_sf}` : null)}
-        {row('Rent Type', listing.rent_type)}
-        {row('Sale Price / SF', listing.sale_price_per_sf ? `$${listing.sale_price_per_sf}` : null)}
-        {row('Total Sale Price', listing.total_sale_price)}
-      </div>
-      <div className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Building Features</p>
-        {row('Clear Height', listing.clear_height)}
-        {row('Dock-High Doors', listing.dh_doors)}
-        {row('Grade-Level Doors', listing.gl_doors)}
-        {row('Sprinklers', listing.sprinklers)}
-        {row('Rail Access', listing.rail_access)}
-        {row('Amperage', listing.amperage)}
-      </div>
-      <div className="mt-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Parking & Yard</p>
-        {row('Parking Spaces', listing.parking_spaces)}
-        {row('Parking Ratio', listing.parking_ratio)}
-        {row('Yard Space', listing.yard_space)}
-      </div>
-      {(listing.highlights || listing.comments) && (
-        <div className="mt-4 col-span-full">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Notes</p>
-          {listing.highlights && (
-            <p className="text-sm text-slate-700 mb-2 whitespace-pre-wrap">{listing.highlights}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-2xl">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-lg transition-colors"
+          >
+            <X size={24} />
+          </button>
+          <div className="pr-12">
+            {listing.property_name && (
+              <h2 className="text-2xl font-bold mb-1">{listing.property_name}</h2>
+            )}
+            <p className="text-blue-100 text-lg font-medium">{listing.street_address}</p>
+            <p className="text-blue-200 text-sm mt-1">
+              {[listing.city, listing.state].filter(Boolean).join(', ')}
+            </p>
+            {listing.listing_status && (
+              <div className="mt-3 inline-block">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-400 text-blue-900">
+                  {listing.listing_status}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-6">
+          {/* Property Details */}
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Building2 size={20} className="text-blue-600" />
+              Property Details
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <DetailItem label="Bldg SF" value={fmtNum(listing.building_sqft)} />
+              <DetailItem label="Available SF" value={fmtNum(listing.available_sqft)} />
+              <DetailItem label="Office SF" value={fmtNum(listing.office_sqft)} />
+              <DetailItem label="Rate / SF" value={listing.rate_per_sf ? `$${listing.rate_per_sf}` : '—'} highlight />
+              <DetailItem label="Rent Type" value={fmt(listing.rent_type)} />
+              <DetailItem label="Sale / SF" value={listing.sale_price_per_sf ? `$${listing.sale_price_per_sf}` : '—'} />
+              <DetailItem label="DH / GL Doors" value={`${fmt(listing.dh_doors, '0')} / ${fmt(listing.gl_doors, '0')}`} />
+              <DetailItem label="Clear Height" value={fmt(listing.clear_height)} />
+              <DetailItem label="Amps" value={fmt(listing.amperage)} />
+              <DetailItem label="Sprinklers" value={fmt(listing.sprinklers)} />
+              <DetailItem label="Rail Access" value={fmt(listing.rail_access)} />
+              <DetailItem label="Yard" value={fmt(listing.yard_space)} />
+              <DetailItem label="Parking Spaces" value={fmt(listing.parking_spaces)} />
+              <DetailItem label="Parking Ratio" value={fmt(listing.parking_ratio)} />
+              <DetailItem label="Source / Listing #" value={`${listing.source} ${listing.listing_number ? `#${listing.listing_number}` : ''}`.trim()} highlight />
+            </div>
+          </div>
+
+          {/* Notes */}
+          {(listing.highlights || listing.comments) && (
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                <MessageSquareQuote size={20} className="text-blue-600" />
+                Notes
+              </h3>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-2">
+                {listing.highlights && <p className="text-slate-800 text-sm font-medium whitespace-pre-wrap">{listing.highlights}</p>}
+                {listing.comments && <p className="text-slate-600 text-sm whitespace-pre-wrap">{listing.comments}</p>}
+              </div>
+            </div>
           )}
-          {listing.comments && (
-            <p className="text-sm text-slate-600 whitespace-pre-wrap">{listing.comments}</p>
+
+          {/* Agent */}
+          {listing.company_agent && (
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Agent Information</h3>
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <p className="text-slate-700 text-sm whitespace-pre-line">{listing.company_agent}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Links */}
+          {(listing.property_link || listing.marketing_flyer || listing.pdf_url) && (
+            <div className="flex gap-3 pt-4 border-t border-slate-200">
+              {listing.property_link && (
+                <a
+                  href={listing.property_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                >
+                  <ExternalLink size={16} />Property Link
+                </a>
+              )}
+              {listing.marketing_flyer && (
+                <a
+                  href={listing.marketing_flyer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm"
+                >
+                  <ExternalLink size={16} />Marketing Flyer
+                </a>
+              )}
+              {listing.pdf_url && (
+                <a
+                  href={listing.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-600 transition-colors font-medium text-sm"
+                >
+                  <ExternalLink size={16} />PDF Brochure
+                </a>
+              )}
+            </div>
           )}
         </div>
-      )}
-      {(listing.property_link || listing.marketing_flyer || listing.pdf_url) && (
-        <div className="mt-4 col-span-full flex gap-3">
-          {listing.property_link && (
-            <a href={listing.property_link} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-              <ExternalLink className="h-3.5 w-3.5" /> Property Link
-            </a>
-          )}
-          {listing.marketing_flyer && (
-            <a href={listing.marketing_flyer} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-              <ExternalLink className="h-3.5 w-3.5" /> Marketing Flyer
-            </a>
-          )}
-          {listing.pdf_url && (
-            <a href={listing.pdf_url} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm text-blue-600 hover:underline">
-              <ExternalLink className="h-3.5 w-3.5" /> PDF
-            </a>
-          )}
-        </div>
-      )}
+      </div>
     </div>
   );
-}
+};
+
+// ---- Main Component ----
 
 export function ListingsSearch() {
   const [query, setQuery] = useState('');
+  const [streetNumber, setStreetNumber] = useState('');
+  const [streetName, setStreetName] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'ILS' | 'AIR'>('all');
-  const [cityFilter, setCityFilter] = useState('all');
+  const [cityFilter, setCityFilter] = useState('');
   const [listings, setListings] = useState<UnifiedListing[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
@@ -156,7 +183,7 @@ export function ListingsSearch() {
       .neq('city', null)
       .then(({ data }) => {
         if (!data) return;
-        const unique = Array.from(new Set(data.map(r => r.city).filter(Boolean) as string[])).sort();
+        const unique = Array.from(new Set(data.map((r: { city: string | null }) => r.city).filter(Boolean) as string[])).sort();
         setCities(unique);
       });
   }, []);
@@ -173,8 +200,14 @@ export function ListingsSearch() {
       .range(from, to);
 
     if (sourceFilter !== 'all') q = q.eq('source', sourceFilter);
-    if (cityFilter !== 'all') q = q.eq('city', cityFilter);
-    if (query.trim()) {
+    if (cityFilter) q = q.eq('city', cityFilter);
+
+    if (streetNumber || streetName) {
+      // Address search mode
+      if (streetName) {
+        q = q.ilike('street_address', `%${streetName}%`);
+      }
+    } else if (query.trim()) {
       const term = `%${query.trim()}%`;
       q = q.or(
         `street_address.ilike.${term},listing_number.ilike.${term},company_agent.ilike.${term},property_name.ilike.${term}`
@@ -187,130 +220,193 @@ export function ListingsSearch() {
       setTotal(count ?? 0);
     }
     setLoading(false);
-  }, [query, sourceFilter, cityFilter]);
+  }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
   useEffect(() => {
     setPage(1);
-  }, [query, sourceFilter, cityFilter]);
+  }, [query, streetNumber, streetName, sourceFilter, cityFilter]);
 
   useEffect(() => {
     load(page);
   }, [load, page]);
 
+  const handleSearch = () => load(1);
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const inputCls = 'bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2 font-medium outline-none transition-all';
+  const btnBlue = 'px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm whitespace-nowrap';
+  const btnSlate = 'px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm whitespace-nowrap';
+
   return (
-    <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search address, listing #, agent..."
-            className="pl-9"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+    <div className="space-y-5">
+      {/* Search Bar */}
+      <Card className="px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3">
+          {/* General Search */}
+          <div className="flex-shrink-0">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Quick Search</label>
+            <div className="flex gap-1.5">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setStreetNumber(''); setStreetName(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="Address, listing #, agent..."
+                  className={`w-56 pl-8 ${inputCls}`}
+                />
+              </div>
+              <button onClick={handleSearch} className={btnBlue}>Search</button>
+              {query && (
+                <button onClick={() => setQuery('')} className="px-2 py-2 text-slate-400 hover:text-red-500 transition-colors">
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="text-slate-300 self-center pb-1">|</div>
+
+          {/* Address Search */}
+          <div className="flex-shrink-0">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Address Search</label>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={streetNumber}
+                onChange={(e) => { setStreetNumber(e.target.value); setQuery(''); }}
+                placeholder="St #"
+                className={`w-20 ${inputCls}`}
+              />
+              <input
+                type="text"
+                value={streetName}
+                onChange={(e) => { setStreetName(e.target.value); setQuery(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                placeholder="Street Name"
+                className={`w-40 ${inputCls}`}
+              />
+              <button onClick={handleSearch} className={btnSlate}>Search</button>
+            </div>
+          </div>
+
+          <div className="text-slate-300 self-center pb-1">|</div>
+
+          {/* Filters */}
+          <div className="flex-shrink-0">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Source</label>
+            <div className="flex bg-slate-100 rounded-lg p-1">
+              {(['all', 'ILS', 'AIR'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSourceFilter(s)}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${sourceFilter === s ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-800'}`}
+                >
+                  {s === 'all' ? 'All' : s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-shrink-0">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">City</label>
+            <select
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+              className={`w-44 ${inputCls}`}
+            >
+              <option value="">All Cities</option>
+              {cities.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <Select value={sourceFilter} onValueChange={v => setSourceFilter(v as 'all' | 'ILS' | 'AIR')}>
-          <SelectTrigger className="w-full sm:w-36">
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="ILS">ILS</SelectItem>
-            <SelectItem value="AIR">AIR</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={cityFilter} onValueChange={(v) => setCityFilter(v ?? 'all')}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="City" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Cities</SelectItem>
-            {cities.map(c => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      </Card>
 
       {/* Results count */}
-      <div className="flex items-center justify-between text-sm text-slate-500">
-        <span>{loading ? 'Loading...' : `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}`}</span>
+      <div className="flex items-center justify-between px-1">
+        <span className="text-sm font-medium text-slate-500">
+          {loading ? 'Loading...' : `${total.toLocaleString()} listing${total !== 1 ? 's' : ''}`}
+        </span>
         {totalPages > 1 && (
-          <span>Page {page} of {totalPages}</span>
+          <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+            Page {page} of {totalPages}
+          </span>
         )}
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-slate-200 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead className="w-12">Src</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead className="hidden sm:table-cell">City</TableHead>
-              <TableHead className="hidden md:table-cell text-right">Bldg SF</TableHead>
-              <TableHead className="hidden md:table-cell text-right">Avail SF</TableHead>
-              <TableHead className="hidden lg:table-cell text-right">Rate/SF</TableHead>
-              <TableHead className="hidden lg:table-cell text-center">DH/GL</TableHead>
-              <TableHead className="hidden xl:table-cell text-center">Clr Ht</TableHead>
-              <TableHead className="hidden xl:table-cell">Date</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {listings.length === 0 && !loading ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-slate-400">
-                  No listings found
-                </TableCell>
-              </TableRow>
-            ) : (
-              listings.map(l => (
-                <TableRow
-                  key={l.id}
-                  className="cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() => setSelected(l)}
-                >
-                  <TableCell>
-                    <Badge variant={l.source === 'ILS' ? 'default' : 'secondary'} className="text-xs">
-                      {l.source}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <div>{l.street_address ?? '—'}</div>
-                    {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-slate-600">{fmt(l.city)}</TableCell>
-                  <TableCell className="hidden md:table-cell text-right text-slate-600">{fmtNum(l.building_sqft)}</TableCell>
-                  <TableCell className="hidden md:table-cell text-right text-slate-600">{fmtNum(l.available_sqft)}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-right font-medium">
-                    {l.rate_per_sf ? `$${l.rate_per_sf}` : '—'}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-center text-slate-600">
-                    {[l.dh_doors, l.gl_doors].map(v => v ?? '—').join(' / ')}
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell text-center text-slate-600">{fmt(l.clear_height)}</TableCell>
-                  <TableCell className="hidden xl:table-cell text-slate-500 text-sm">{fmt(l.listing_date)}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <Card className="p-0 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-100 text-slate-500 font-semibold uppercase text-xs">
+              <tr>
+                <th className="px-4 py-3">Src</th>
+                <th className="px-4 py-3">Address</th>
+                <th className="px-4 py-3 hidden sm:table-cell">City</th>
+                <th className="px-4 py-3 text-right hidden md:table-cell">Bldg SF</th>
+                <th className="px-4 py-3 text-right hidden md:table-cell">Avail SF</th>
+                <th className="px-4 py-3 text-right hidden lg:table-cell">Rate/SF</th>
+                <th className="px-4 py-3 text-center hidden lg:table-cell">DH/GL</th>
+                <th className="px-4 py-3 text-center hidden xl:table-cell">Clr Ht</th>
+                <th className="px-4 py-3 hidden xl:table-cell">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {listings.length === 0 && !loading ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                    No listings found
+                  </td>
+                </tr>
+              ) : (
+                listings.map((l) => (
+                  <tr
+                    key={l.id}
+                    className="hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={() => setSelected(l)}
+                  >
+                    <td className="px-4 py-3">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.source === 'AIR' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                        {l.source}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{l.street_address ?? '—'}</div>
+                      {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{fmt(l.city)}</td>
+                    <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.building_sqft)}</td>
+                    <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.available_sqft)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-blue-600 hidden lg:table-cell">
+                      {l.rate_per_sf ? `$${l.rate_per_sf}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-slate-600 hidden lg:table-cell">
+                      {fmt(l.dh_doors, '0')}/{fmt(l.gl_doors, '0')}
+                    </td>
+                    <td className="px-4 py-3 text-center text-slate-600 hidden xl:table-cell">{fmt(l.clear_height)}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs hidden xl:table-cell">{fmt(l.listing_date)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.max(1, p - 1))}
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1 || loading}
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+            <ChevronLeft size={16} />
+          </button>
           {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
             let pg: number;
             if (totalPages <= 7) pg = i + 1;
@@ -318,41 +414,28 @@ export function ListingsSearch() {
             else if (page >= totalPages - 3) pg = totalPages - 6 + i;
             else pg = page - 3 + i;
             return (
-              <Button
+              <button
                 key={pg}
-                variant={pg === page ? 'default' : 'outline'}
-                size="sm"
-                className="w-9"
                 onClick={() => setPage(pg)}
                 disabled={loading}
+                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${pg === page ? 'bg-blue-600 text-white' : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'}`}
               >
                 {pg}
-              </Button>
+              </button>
             );
           })}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page === totalPages || loading}
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
 
       {/* Detail Modal */}
-      <Dialog open={!!selected} onOpenChange={o => !o && setSelected(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base font-semibold">
-              {selected?.street_address ?? 'Listing Detail'}
-              {selected?.city && <span className="font-normal text-slate-500 ml-2">— {selected.city}</span>}
-            </DialogTitle>
-          </DialogHeader>
-          {selected && <ListingDetail listing={selected} />}
-        </DialogContent>
-      </Dialog>
+      {selected && <ListingModal listing={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }

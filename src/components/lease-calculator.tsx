@@ -1,20 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { calculate, formatCurrency, formatDate } from '@/lib/calculator';
+import { calculate } from '@/lib/calculator';
 import type { CalcInputs } from '@/types';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
+import { Calculator, X, DollarSign, Calendar } from 'lucide-react';
 
 const DEFAULT_INPUTS: CalcInputs = {
   sqFt: '',
@@ -27,142 +16,351 @@ const DEFAULT_INPUTS: CalcInputs = {
   rentType: 'NNN',
 };
 
-function Field({
+// ---- Sub-components (match LeaseAnalyzer exactly) ----
+
+const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
+  <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
+    {children}
+  </div>
+);
+
+const InputGroup = ({
   label,
-  id,
+  icon: Icon,
   value,
   onChange,
-  placeholder,
   type = 'text',
+  prefix,
+  suffix,
+  placeholder,
+  onClear,
+  readOnly = false,
 }: {
-  label: string;
-  id: string;
+  label?: string;
+  icon?: React.ElementType;
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   type?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-sm text-slate-600">{label}</Label>
-      <Input
-        id={id}
+  prefix?: string;
+  suffix?: string;
+  placeholder?: string;
+  onClear?: () => void;
+  readOnly?: boolean;
+}) => (
+  <div className="space-y-1">
+    {label && (
+      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+        {Icon && <Icon size={12} />}
+        {label}
+      </label>
+    )}
+    <div className="relative">
+      {prefix && (
+        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-medium pointer-events-none text-sm">
+          {prefix}
+        </div>
+      )}
+      <input
         type={type}
+        step="any"
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="bg-white"
+        readOnly={readOnly}
+        className={`w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all font-medium outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-calendar-picker-indicator]:hidden ${
+          prefix ? 'pl-6' : ''
+        } ${suffix || onClear ? 'pr-8' : ''} ${readOnly ? 'bg-slate-100 text-slate-500 cursor-default' : ''}`}
       />
+      {suffix && !onClear && (
+        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">
+          {suffix}
+        </div>
+      )}
+      {onClear && value && (
+        <button
+          onClick={onClear}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+          title="Clear"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
-  );
-}
+  </div>
+);
 
-function ResultRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between py-2 border-b border-slate-100 last:border-0 ${highlight ? 'font-semibold' : ''}`}>
-      <span className={`text-sm ${highlight ? 'text-slate-900' : 'text-slate-600'}`}>{label}</span>
-      <span className={`text-sm tabular-nums ${highlight ? 'text-slate-900 text-base' : 'text-slate-700'}`}>{value}</span>
-    </div>
-  );
-}
+const SelectGroup = ({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) => (
+  <div className="space-y-1">
+    {label && (
+      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+        {label}
+      </label>
+    )}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2 font-medium outline-none"
+    >
+      {options.map((opt) => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
+  </div>
+);
+
+const SectionHeader = ({ icon: Icon, title }: { icon?: React.ElementType; title: string }) => (
+  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 border-t border-slate-200 pt-3 first:border-0 first:pt-0">
+    {Icon && <Icon size={13} />} {title}
+  </h3>
+);
+
+const ResultCard = ({
+  label,
+  value,
+  subtext,
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  subtext?: string;
+  highlight?: boolean;
+}) => (
+  <div className={`p-4 rounded-xl border ${highlight ? 'bg-blue-50 border-blue-100' : 'bg-slate-50 border-slate-100'}`}>
+    <div className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">{label}</div>
+    <div className={`text-2xl font-bold ${highlight ? 'text-blue-700' : 'text-slate-800'}`}>{value}</div>
+    {subtext && <div className="text-slate-400 text-xs mt-1 font-medium">{subtext}</div>}
+  </div>
+);
+
+// ---- Main Component ----
 
 export function LeaseCalculator() {
   const [inputs, setInputs] = useState<CalcInputs>(DEFAULT_INPUTS);
 
   const set = (key: keyof CalcInputs) => (val: string) =>
-    setInputs(prev => ({ ...prev, [key]: val }));
+    setInputs((prev) => ({ ...prev, [key]: val }));
 
   const result = useMemo(() => calculate(inputs), [inputs]);
 
+  const handleClear = () => setInputs(DEFAULT_INPUTS);
+
+  const rateDecimals = (() => {
+    if (!inputs.rentPerSqFt) return 2;
+    const dotIndex = inputs.rentPerSqFt.indexOf('.');
+    if (dotIndex === -1) return 2;
+    return Math.max(2, inputs.rentPerSqFt.length - dotIndex - 1);
+  })();
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Inputs */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-slate-900">Lease Terms</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Size (SF)" id="sqFt" value={inputs.sqFt} onChange={set('sqFt')} placeholder="e.g. 50000" />
-            <Field label="Rate / SF / Mo" id="rentPerSqFt" value={inputs.rentPerSqFt} onChange={set('rentPerSqFt')} placeholder="e.g. 1.25" />
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Lease Calculator</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Enter lease terms to calculate effective rent and rent schedule</p>
+        </div>
+        <button
+          onClick={handleClear}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-600 text-sm font-medium transition-colors text-slate-600"
+        >
+          <X size={16} />Clear
+        </button>
+      </div>
+
+      {/* Parameters Card */}
+      <Card className="p-5">
+        <div className="space-y-4">
+          {/* Financials */}
+          <div>
+            <SectionHeader icon={DollarSign} title="Lease Financials" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <InputGroup
+                  label="Size (SF)"
+                  value={inputs.sqFt}
+                  onChange={set('sqFt')}
+                  placeholder="e.g. 50000"
+                />
+                <InputGroup
+                  label="Rate / SF / Mo"
+                  value={inputs.rentPerSqFt}
+                  onChange={set('rentPerSqFt')}
+                  placeholder="e.g. 1.25"
+                  prefix="$"
+                />
+                <InputGroup
+                  label="Term (Months)"
+                  value={inputs.termInMonths}
+                  onChange={set('termInMonths')}
+                  placeholder="e.g. 60"
+                />
+                <SelectGroup
+                  label="Rent Type"
+                  value={inputs.rentType}
+                  onChange={set('rentType')}
+                  options={['NNN', 'MG', 'G', 'IG', 'FSG']}
+                />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <InputGroup
+                  label="Free Rent (Months)"
+                  value={inputs.freeRentMonths}
+                  onChange={set('freeRentMonths')}
+                  placeholder="0"
+                  onClear={() => set('freeRentMonths')('0')}
+                />
+                <InputGroup
+                  label="Annual Escalation"
+                  value={inputs.rentAdjustments}
+                  onChange={set('rentAdjustments')}
+                  placeholder="3% or $0.05"
+                />
+                <InputGroup
+                  label="TI Allowance ($)"
+                  value={inputs.tiA}
+                  onChange={set('tiA')}
+                  placeholder="0"
+                />
+                <InputGroup
+                  label="Effective Rent"
+                  value={result ? `$${result.results.effectiveRate.toFixed(rateDecimals)}` : ''}
+                  onChange={() => {}}
+                  readOnly
+                />
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Term (Months)" id="termInMonths" value={inputs.termInMonths} onChange={set('termInMonths')} placeholder="e.g. 60" />
-            <Field label="Occupancy Date" id="occupancyDate" value={inputs.occupancyDate} onChange={set('occupancyDate')} placeholder="MM/DD/YYYY" type="date" />
+
+          {/* Dates */}
+          <div>
+            <SectionHeader icon={Calendar} title="Dates" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <InputGroup
+                label="Occupancy Date"
+                type="date"
+                value={inputs.occupancyDate}
+                onChange={set('occupancyDate')}
+              />
+              <InputGroup
+                label="Expiration Date"
+                value={result?.results.expireDate
+                  ? `${String(result.results.expireDate.getMonth() + 1).padStart(2, '0')}-${String(result.results.expireDate.getDate()).padStart(2, '0')}-${result.results.expireDate.getFullYear()}`
+                  : ''}
+                onChange={() => {}}
+                readOnly
+              />
+            </div>
           </div>
-          <Separator />
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Free Rent (Months)" id="freeRentMonths" value={inputs.freeRentMonths} onChange={set('freeRentMonths')} placeholder="0" />
-            <Field label="Annual Escalation" id="rentAdjustments" value={inputs.rentAdjustments} onChange={set('rentAdjustments')} placeholder="3% or $0.05" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="TI Allowance ($)" id="tiA" value={inputs.tiA} onChange={set('tiA')} placeholder="0" />
-            <Field label="Rent Type" id="rentType" value={inputs.rentType} onChange={set('rentType')} placeholder="NNN" />
-          </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Results */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-900">Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {result ? (
-              <div>
-                <ResultRow label="Total Consideration" value={formatCurrency(result.results.totalConsideration, 0)} highlight />
-                <ResultRow label="Net Total (after free rent)" value={formatCurrency(result.results.netTotal, 0)} />
-                <ResultRow label="Year 1 Annual Rent" value={formatCurrency(result.results.year1AnnualRent, 0)} />
-                <ResultRow label="Free Rent Value" value={formatCurrency(result.results.freeRentValue, 0)} />
-                <Separator className="my-2" />
-                <ResultRow label="Average Rate / SF / Mo" value={`$${result.results.averageRate.toFixed(4)}`} />
-                <ResultRow label="Effective Rate / SF / Mo" value={`$${result.results.effectiveRate.toFixed(4)}`} highlight />
-                <Separator className="my-2" />
-                <ResultRow label="Expiration Date" value={formatDate(result.results.expireDate)} />
-                <ResultRow label="TI / SF" value={result.results.tiPerSqFt > 0 ? formatCurrency(result.results.tiPerSqFt) : '—'} />
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400 py-4 text-center">
-                Enter size, rate, term, and occupancy date to calculate.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      {result ? (
+        <div className="space-y-6">
+          {/* Primary metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <ResultCard
+              label="Effective Rate"
+              value={`$${result.results.effectiveRate.toFixed(rateDecimals)}`}
+              subtext="Per SF / Month"
+              highlight
+            />
+            <ResultCard
+              label="Average Rate"
+              value={`$${result.results.averageRate.toFixed(rateDecimals)}`}
+              subtext="Per SF / Month"
+            />
+            <ResultCard
+              label="Total Consideration"
+              value={`$${result.results.totalConsideration.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              subtext="Gross Rent"
+            />
+            <ResultCard
+              label="Net Total"
+              value={`$${result.results.netTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              subtext="After Free Rent"
+            />
+          </div>
 
-        {/* Rent Schedule */}
-        {result && result.schedule.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-slate-900">Rent Schedule</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50">
-                    <TableHead className="text-xs">Year</TableHead>
-                    <TableHead className="text-xs">Months</TableHead>
-                    <TableHead className="text-xs text-right">Rate / SF</TableHead>
-                    <TableHead className="text-xs text-right">Monthly Rent</TableHead>
-                    <TableHead className="text-xs text-right">Period Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {result.schedule.map(row => (
-                    <TableRow key={row.year}>
-                      <TableCell className="text-sm py-2">Yr {row.year}</TableCell>
-                      <TableCell className="text-sm py-2">{row.months}</TableCell>
-                      <TableCell className="text-sm py-2 text-right tabular-nums">${row.rate.toFixed(4)}</TableCell>
-                      <TableCell className="text-sm py-2 text-right tabular-nums">{formatCurrency(row.monthlyRent, 0)}</TableCell>
-                      <TableCell className="text-sm py-2 text-right tabular-nums font-medium">{formatCurrency(row.periodTotal, 0)}</TableCell>
-                    </TableRow>
+          {/* Secondary metrics */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <ResultCard
+              label="Year 1 Annual"
+              value={`$${result.results.year1AnnualRent.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              subtext="Annual Rent"
+            />
+            <ResultCard
+              label="Free Rent Value"
+              value={`$${result.results.freeRentValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+              subtext="Concession"
+            />
+            <ResultCard
+              label="TI / SF"
+              value={result.results.tiPerSqFt > 0 ? `$${result.results.tiPerSqFt.toFixed(2)}` : '—'}
+              subtext="Tenant Improvement"
+            />
+            <ResultCard
+              label="Expiration"
+              value={result.results.expireDate
+                ? `${String(result.results.expireDate.getMonth() + 1).padStart(2, '0')}-${String(result.results.expireDate.getDate()).padStart(2, '0')}-${result.results.expireDate.getFullYear()}`
+                : '—'}
+              subtext="Lease End Date"
+            />
+          </div>
+
+          {/* Rent Schedule */}
+          <Card className="p-0 overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+              <h3 className="font-bold text-slate-700">Rent Schedule</h3>
+              <span className="text-xs font-mono text-slate-500">
+                {inputs.rentType && `${inputs.rentType} — `}
+                {inputs.sqFt ? `${Number(inputs.sqFt).toLocaleString()} SF` : ''}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-100 text-slate-500 font-semibold uppercase text-xs">
+                  <tr>
+                    <th className="px-4 py-3">Year</th>
+                    <th className="px-4 py-3">Rate</th>
+                    <th className="px-4 py-3">Months</th>
+                    <th className="px-4 py-3">Monthly Rent</th>
+                    <th className="px-4 py-3 text-right">Period Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {result.schedule.map((row) => (
+                    <tr key={row.year} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-900">{row.year}</td>
+                      <td className="px-4 py-3 text-blue-600 font-bold">${row.rate.toFixed(rateDecimals)}</td>
+                      <td className="px-4 py-3">{row.months}</td>
+                      <td className="px-4 py-3">${row.monthlyRent.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-medium">${row.periodTotal.toLocaleString()}</td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-            </CardContent>
+                </tbody>
+              </table>
+            </div>
           </Card>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center text-slate-400 p-12 border-2 border-dashed border-slate-300 rounded-xl">
+          <div className="text-center">
+            <Calculator size={48} className="mx-auto mb-4 opacity-50" />
+            <p>Enter size, rate, term, and occupancy date to calculate</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
