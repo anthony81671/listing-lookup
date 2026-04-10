@@ -3,7 +3,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { calculate } from '@/lib/calculator';
 import type { CalcInputs, UnifiedListing } from '@/types';
-import { Calculator, X, DollarSign, Calendar, Building2 } from 'lucide-react';
+import { Calculator, X, DollarSign, Calendar } from 'lucide-react';
+import { PropertyBanner } from '@/components/property-banner';
 
 const DEFAULT_INPUTS: CalcInputs = {
   sqFt: '',
@@ -178,10 +179,11 @@ export function LeaseCalculator({
   };
 
   const rateDecimals = (() => {
-    if (!inputs.rentPerSqFt) return 2;
-    const dotIndex = inputs.rentPerSqFt.indexOf('.');
+    const r = inputs.rentPerSqFt.replace(/[^0-9.]/g, '');
+    if (!r) return 2;
+    const dotIndex = r.indexOf('.');
     if (dotIndex === -1) return 2;
-    return Math.max(2, inputs.rentPerSqFt.length - dotIndex - 1);
+    return Math.max(2, r.length - dotIndex - 1);
   })();
 
   return (
@@ -202,18 +204,10 @@ export function LeaseCalculator({
 
       {/* Prefill Banner */}
       {prefill && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm">
-          <Building2 size={15} className="text-green-600 flex-shrink-0" />
-          <span className="text-green-800 font-medium flex-1">
-            Pre-filled from: <span className="font-bold">{prefill.street_address}</span>
-            {prefill.city ? `, ${prefill.city}` : ''}
-            {prefill.available_sqft ? ` — ${Number(prefill.available_sqft.replace(/[^0-9.]/g, '')).toLocaleString()} SF` : ''}
-            {prefill.rate_per_sf ? ` @ $${prefill.rate_per_sf}/SF` : ''}
-          </span>
-          <button onClick={onClearPrefill} className="text-green-600 hover:text-green-800 transition-colors">
-            <X size={14} />
-          </button>
-        </div>
+        <PropertyBanner
+          listing={prefill}
+          onDismiss={() => onClearPrefill?.()}
+        />
       )}
 
       {/* Parameters Card */}
