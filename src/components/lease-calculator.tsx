@@ -18,6 +18,8 @@ const DEFAULT_INPUTS: CalcInputs = {
   daysOnMarket: '',
   landAcres: '',
   parkingRatio: '',
+  officeSqFt: '',
+  transactionDate: '',
   transactionType: 'lease',
   lessor: '',
   lessee: '',
@@ -186,9 +188,18 @@ function CompSummaryCard({
   const landSF = inputs.landAcres ? Math.round(parseFloat(inputs.landAcres) * 43560) : 0;
   const dom = inputs.daysOnMarket ? parseFloat(inputs.daysOnMarket) : 0;
   const expDate = fmtDate(results.expireDate);
-  const occDate = inputs.occupancyDate
-    ? fmtDate(new Date(inputs.occupancyDate))
-    : '—';
+  const occDate = inputs.occupancyDate ? fmtDate(new Date(inputs.occupancyDate)) : '—';
+  const transDate = inputs.transactionDate ? fmtDate(new Date(inputs.transactionDate)) : '—';
+
+  // Property detail helpers — prefer manual input, fall back to prefill
+  const p = (inputVal: string, prefillVal: string | null | undefined) =>
+    inputVal?.trim() || prefillVal?.trim() || '';
+  const officeSF = inputs.officeSqFt
+    ? Number(inputs.officeSqFt).toLocaleString()
+    : prefill?.office_sqft
+    ? Number(prefill.office_sqft.replace(/[^0-9.]/g, '')).toLocaleString()
+    : '';
+  const parking = inputs.parkingRatio || prefill?.parking_ratio || prefill?.parking_spaces || '';
 
   const yr = (n: number) => {
     const row = schedule[n - 1];
@@ -233,7 +244,7 @@ function CompSummaryCard({
 
         {/* Col 2 — Dates & Terms */}
         <div className="space-y-0.5">
-          <Field label="Trans Date" value="" />
+          <Field label="Trans Date" value={transDate} />
           <Field label="Occ Date" value={occDate} />
           <Field label="Term" value={inputs.termInMonths ? `${inputs.termInMonths} Mo` : ''} />
           <Field label="Exp Date" value={expDate} />
@@ -258,13 +269,13 @@ function CompSummaryCard({
 
         {/* Col 4 — Property Specs */}
         <div className="space-y-0.5">
-          <Field label="DH Door" value="" />
-          <Field label="GL Door" value="" />
-          <Field label="Height" value="" />
-          <Field label="Amps" value="" />
-          <Field label="Parking" value={inputs.parkingRatio} />
+          <Field label="DH Door" value={p('', prefill?.dh_doors)} />
+          <Field label="GL Door" value={p('', prefill?.gl_doors)} />
+          <Field label="Height" value={p('', prefill?.clear_height)} />
+          <Field label="Amps" value={p('', prefill?.amperage)} />
+          <Field label="Parking" value={parking} />
           <Field label="Load" value="" />
-          <Field label="Sprink" value="" />
+          <Field label="Sprink" value={p('', prefill?.sprinklers)} />
           <Field label="TI" value={inputs.tiA && inputs.tiA !== '0' ? fmtMoney(parseFloat(inputs.tiA)) : '$0.00'} />
           <Field label="Options" value="" />
         </div>
@@ -273,19 +284,19 @@ function CompSummaryCard({
         <div className="space-y-0.5">
           <Field label="Bldg SqFt" value={prefill?.building_sqft ? Number(prefill.building_sqft.replace(/[^0-9.]/g, '')).toLocaleString() : ''} />
           <Field label="Land SqFt" value={landSF > 0 ? landSF.toLocaleString() : ''} />
-          <Field label="Office SqFt" value={prefill?.office_sqft ? Number(prefill.office_sqft.replace(/[^0-9.]/g, '')).toLocaleString() : ''} />
+          <Field label="Office SqFt" value={officeSF} />
           <Field label="Updated" value="" />
           <Field label="APN" value="" />
           <Field label="Source" value={prefill?.source ?? ''} />
-          <Field label="Rail" value="" />
-          <Field label="Yard" value="" />
+          <Field label="Rail" value={p('', prefill?.rail_access)} />
+          <Field label="Yard" value={p('', prefill?.yard_space)} />
           <Field label="Cons Type" value="" />
         </div>
 
         {/* Col 6 — IDs */}
         <div className="space-y-0.5">
           <Field label="ID" value={prefill?.listing_number ?? ''} />
-          <Field label="Office" value="" />
+          <Field label="Office SF" value={officeSF} />
           <Field label="Updated" value="" />
           <Field label="Update By" value="" />
           <Field label="TI/SF" value={results.tiPerSqFt > 0 ? `$${results.tiPerSqFt.toFixed(2)}` : '$0.00'} />
@@ -341,6 +352,8 @@ export function LeaseCalculator({
       sqFt: sqFt.replace(/[^0-9.]/g, ''),
       rentPerSqFt: rate,
       rentType,
+      officeSqFt: (prefill.office_sqft ?? '').replace(/[^0-9.]/g, ''),
+      parkingRatio: prefill.parking_ratio ?? prefill.parking_spaces ?? prev.parkingRatio,
     }));
   }, [prefill]);
 
@@ -411,17 +424,17 @@ export function LeaseCalculator({
                   placeholder="e.g. 1.25"
                   prefix="$"
                 />
-                <InputGroup
-                  label="Term (Months)"
-                  value={inputs.termInMonths}
-                  onChange={set('termInMonths')}
-                  placeholder="e.g. 60"
-                />
                 <SelectGroup
                   label="Rent Type"
                   value={inputs.rentType}
                   onChange={set('rentType')}
                   options={['NNN', 'MG', 'G', 'IG', 'FSG']}
+                />
+                <InputGroup
+                  label="Term (Months)"
+                  value={inputs.termInMonths}
+                  onChange={set('termInMonths')}
+                  placeholder="e.g. 60"
                 />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -445,12 +458,6 @@ export function LeaseCalculator({
                   placeholder="0"
                   prefix="$"
                 />
-                <InputGroup
-                  label="Effective Rent"
-                  value={result ? `$${result.results.effectiveRate.toFixed(rateDecimals)}` : ''}
-                  onChange={() => {}}
-                  readOnly
-                />
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <InputGroup
@@ -471,6 +478,12 @@ export function LeaseCalculator({
                   onChange={set('parkingRatio')}
                   placeholder="e.g. 2.5:1"
                 />
+                <InputGroup
+                  label="Office SF"
+                  value={inputs.officeSqFt}
+                  onChange={set('officeSqFt')}
+                  placeholder="e.g. 800"
+                />
               </div>
             </div>
           </div>
@@ -479,6 +492,12 @@ export function LeaseCalculator({
           <div>
             <SectionHeader icon={Calendar} title="Dates" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <InputGroup
+                label="Transaction Date"
+                type="date"
+                value={inputs.transactionDate}
+                onChange={set('transactionDate')}
+              />
               <InputGroup
                 label="Occupancy Date"
                 type="date"

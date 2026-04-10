@@ -304,6 +304,27 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
               {cities.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
+
+          {(query || streetNumber || streetName || cityFilter || sourceFilter !== 'all') && (
+            <div className="flex-shrink-0 self-end">
+              <button
+                onClick={() => {
+                  setQuery('');
+                  setStreetNumber('');
+                  setStreetName('');
+                  setSourceFilter('all');
+                  setCityFilter('');
+                  setAllListings([]);
+                  setSelected(null);
+                  setHasSearched(false);
+                  setPage(1);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-500 border border-slate-200 rounded-lg bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+              >
+                <X size={14} /> Clear
+              </button>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -343,13 +364,13 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
               <tr>
                 <th className="px-4 py-3">Src</th>
                 <th className="px-4 py-3">Address</th>
-                <th className="px-4 py-3 hidden sm:table-cell">City</th>
-                <th className="px-4 py-3 text-right hidden md:table-cell">Bldg SF</th>
-                <th className="px-4 py-3 text-right hidden md:table-cell">Avail SF</th>
-                <th className="px-4 py-3 text-right hidden lg:table-cell">Rate/SF</th>
-                <th className="px-4 py-3 text-center hidden lg:table-cell">DH/GL</th>
-                <th className="px-4 py-3 text-center hidden xl:table-cell">Clr Ht</th>
-                <th className="px-4 py-3 hidden xl:table-cell">Date</th>
+                <th className="px-4 py-3">City</th>
+                <th className="px-4 py-3 text-right">Bldg SF</th>
+                <th className="px-4 py-3 text-right">Avail SF</th>
+                <th className="px-4 py-3 text-right">Rate/SF</th>
+                <th className="px-4 py-3 text-center">DH/GL</th>
+                <th className="px-4 py-3 text-center">Clr Ht</th>
+                <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3 text-center">Links</th>
               </tr>
             </thead>
@@ -380,17 +401,17 @@ export function ListingsSearch({ onUseInCalculator }: { onUseInCalculator: (l: U
                         <div className={`font-medium ${isActive ? 'text-blue-700' : 'text-slate-900'}`}>{l.street_address ?? '—'}</div>
                         {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
                       </td>
-                      <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{fmt(l.city)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.building_sqft)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.available_sqft)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-blue-600 hidden lg:table-cell">
+                      <td className="px-4 py-3 text-slate-600">{fmt(l.city)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{fmtNum(l.building_sqft)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{fmtNum(l.available_sqft)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-blue-600">
                         {fmtRate(l.rate_per_sf)}
                       </td>
-                      <td className="px-4 py-3 text-center text-slate-600 hidden lg:table-cell">
+                      <td className="px-4 py-3 text-center text-slate-600">
                         {fmt(l.dh_doors, '0')}/{fmt(l.gl_doors, '0')}
                       </td>
-                      <td className="px-4 py-3 text-center text-slate-600 hidden xl:table-cell">{fmt(l.clear_height)}</td>
-                      <td className="px-4 py-3 text-slate-500 text-xs hidden xl:table-cell">{fmt(l.listing_date)}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{fmt(l.clear_height)}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs">{fmt(l.listing_date)}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1.5">
                           {photoUrl ? (
