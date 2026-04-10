@@ -50,8 +50,25 @@ export interface CalcInputs {
   daysOnMarket: string;
   landAcres: string;
   parkingRatio: string;
+  parkingSpaces: string;
   officeSqFt: string;
   transactionDate: string;
+  // Property details
+  propertyType: string;
+  propertySubtype: string;
+  buildingClass: string;
+  floors: string;
+  yearBuilt: string;
+  clearHeight: string;
+  dhDoors: string;
+  glDoors: string;
+  amperage: string;
+  sprinklers: string;
+  yard: string;
+  rail: string;
+  construction: string;
+  multiTenant: string;
+  brochureLink: string;
   // Transaction type
   transactionType: 'lease' | 'sale';
   // Parties

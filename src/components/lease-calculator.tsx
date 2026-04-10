@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { calculate } from '@/lib/calculator';
 import type { CalcInputs, UnifiedListing } from '@/types';
-import { Calculator, X, DollarSign, Calendar, Building2 as _B2, Users } from 'lucide-react';
+import { Calculator, X, DollarSign, Calendar, Building2, Users } from 'lucide-react';
 import { PropertyBanner } from '@/components/property-banner';
 
 const DEFAULT_INPUTS: CalcInputs = {
@@ -18,8 +18,24 @@ const DEFAULT_INPUTS: CalcInputs = {
   daysOnMarket: '',
   landAcres: '',
   parkingRatio: '',
+  parkingSpaces: '',
   officeSqFt: '',
   transactionDate: '',
+  propertyType: 'Industrial',
+  propertySubtype: '',
+  buildingClass: '',
+  floors: '',
+  yearBuilt: '',
+  clearHeight: '',
+  dhDoors: '',
+  glDoors: '',
+  amperage: '',
+  sprinklers: '',
+  yard: '',
+  rail: '',
+  construction: '',
+  multiTenant: '',
+  brochureLink: '',
   transactionType: 'lease',
   lessor: '',
   lessee: '',
@@ -353,7 +369,15 @@ export function LeaseCalculator({
       rentPerSqFt: rate,
       rentType,
       officeSqFt: (prefill.office_sqft ?? '').replace(/[^0-9.]/g, ''),
-      parkingRatio: prefill.parking_ratio ?? prefill.parking_spaces ?? prev.parkingRatio,
+      parkingRatio: prefill.parking_ratio ?? prev.parkingRatio,
+      parkingSpaces: prefill.parking_spaces ?? prev.parkingSpaces,
+      clearHeight: prefill.clear_height ?? prev.clearHeight,
+      dhDoors: prefill.dh_doors ?? prev.dhDoors,
+      glDoors: prefill.gl_doors ?? prev.glDoors,
+      amperage: prefill.amperage ?? prev.amperage,
+      sprinklers: prefill.sprinklers ?? prev.sprinklers,
+      yard: prefill.yard_space ?? prev.yard,
+      rail: prefill.rail_access ?? prev.rail,
     }));
   }, [prefill]);
 
@@ -472,18 +496,6 @@ export function LeaseCalculator({
                   onChange={set('landAcres')}
                   placeholder="e.g. 2.5"
                 />
-                <InputGroup
-                  label="Parking Ratio"
-                  value={inputs.parkingRatio}
-                  onChange={set('parkingRatio')}
-                  placeholder="e.g. 2.5:1"
-                />
-                <InputGroup
-                  label="Office SF"
-                  value={inputs.officeSqFt}
-                  onChange={set('officeSqFt')}
-                  placeholder="e.g. 800"
-                />
               </div>
             </div>
           </div>
@@ -511,6 +523,140 @@ export function LeaseCalculator({
                   : ''}
                 onChange={() => {}}
                 readOnly
+              />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Property Details Card */}
+      <Card className="p-5">
+        <div className="space-y-3">
+          <SectionHeader icon={Building2} title="Property Details" />
+
+          {/* Row 1 — Type / Subtype / Class / Floors / Year Built */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <SelectGroup
+              label="Property Type"
+              value={inputs.propertyType}
+              onChange={set('propertyType')}
+              options={['Industrial', 'Office', 'Retail', 'Flex', 'Land']}
+            />
+            <SelectGroup
+              label="Subtype"
+              value={inputs.propertySubtype}
+              onChange={set('propertySubtype')}
+              options={['', 'Warehouse', 'Distribution', 'Manufacturing', 'R&D', 'Flex', 'Cold Storage', 'Yard']}
+            />
+            <SelectGroup
+              label="Building Class"
+              value={inputs.buildingClass}
+              onChange={set('buildingClass')}
+              options={['', 'A', 'B', 'C']}
+            />
+            <InputGroup
+              label="Floors"
+              value={inputs.floors}
+              onChange={set('floors')}
+              placeholder="e.g. 2"
+            />
+            <InputGroup
+              label="Year Built"
+              value={inputs.yearBuilt}
+              onChange={set('yearBuilt')}
+              placeholder="e.g. 2000"
+            />
+          </div>
+
+          {/* Row 2 — Office SF / Clear Height / DH Doors / GL Doors / Amps */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <InputGroup
+              label="Office SF"
+              value={inputs.officeSqFt}
+              onChange={set('officeSqFt')}
+              placeholder="e.g. 800"
+            />
+            <InputGroup
+              label="Clear Height"
+              value={inputs.clearHeight}
+              onChange={set('clearHeight')}
+              placeholder="e.g. 28"
+              suffix="ft"
+            />
+            <InputGroup
+              label="DH Doors"
+              value={inputs.dhDoors}
+              onChange={set('dhDoors')}
+              placeholder="e.g. 4"
+            />
+            <InputGroup
+              label="GL Doors"
+              value={inputs.glDoors}
+              onChange={set('glDoors')}
+              placeholder="e.g. 1"
+            />
+            <InputGroup
+              label="Amps"
+              value={inputs.amperage}
+              onChange={set('amperage')}
+              placeholder="e.g. 2000"
+            />
+          </div>
+
+          {/* Row 3 — Sprinklers / Parking Ratio / Parking Spaces / Yard / Rail */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <SelectGroup
+              label="Sprinklers"
+              value={inputs.sprinklers}
+              onChange={set('sprinklers')}
+              options={['', 'Y', 'N', 'ESFR', 'Wet', 'Dry']}
+            />
+            <InputGroup
+              label="Parking Ratio"
+              value={inputs.parkingRatio}
+              onChange={set('parkingRatio')}
+              placeholder="e.g. 2.5:1"
+            />
+            <InputGroup
+              label="Parking Spaces"
+              value={inputs.parkingSpaces}
+              onChange={set('parkingSpaces')}
+              placeholder="e.g. 50"
+            />
+            <SelectGroup
+              label="Yard"
+              value={inputs.yard}
+              onChange={set('yard')}
+              options={['', 'Y', 'N']}
+            />
+            <SelectGroup
+              label="Rail"
+              value={inputs.rail}
+              onChange={set('rail')}
+              options={['', 'Y', 'N']}
+            />
+          </div>
+
+          {/* Row 4 — Construction / Multi-Tenant / Brochure Link */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <SelectGroup
+              label="Construction"
+              value={inputs.construction}
+              onChange={set('construction')}
+              options={['', 'Concrete Tilt-Up', 'Masonry', 'Steel', 'Wood Frame', 'Precast']}
+            />
+            <SelectGroup
+              label="Multi-Tenant"
+              value={inputs.multiTenant}
+              onChange={set('multiTenant')}
+              options={['', 'Y', 'N']}
+            />
+            <div className="md:col-span-2">
+              <InputGroup
+                label="Brochure Link"
+                value={inputs.brochureLink}
+                onChange={set('brochureLink')}
+                placeholder="URL"
               />
             </div>
           </div>
