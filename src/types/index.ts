@@ -47,6 +47,9 @@ export interface CalcInputs {
   rentAdjustments: string;
   tiA: string;
   rentType: string;
+  daysOnMarket: string;
+  landAcres: string;
+  parkingRatio: string;
 }
 
 export interface CalcResults {

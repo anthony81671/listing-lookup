@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { calculate } from '@/lib/calculator';
 import type { CalcInputs, UnifiedListing } from '@/types';
-import { Calculator, X, DollarSign, Calendar } from 'lucide-react';
+import { Calculator, X, DollarSign, Calendar, Building2 as _B2 } from 'lucide-react';
 import { PropertyBanner } from '@/components/property-banner';
 
 const DEFAULT_INPUTS: CalcInputs = {
@@ -15,9 +15,12 @@ const DEFAULT_INPUTS: CalcInputs = {
   rentAdjustments: '3%',
   tiA: '0',
   rentType: 'NNN',
+  daysOnMarket: '',
+  landAcres: '',
+  parkingRatio: '',
 };
 
-// ---- Sub-components (match LeaseAnalyzer exactly) ----
+// ---- Sub-components ----
 
 const Card = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
   <div className={`bg-white rounded-xl border border-slate-200 shadow-sm ${className}`}>
@@ -143,6 +146,159 @@ const ResultCard = ({
   </div>
 );
 
+// ---- Comp Summary Card (Metropolis-style dense grid) ----
+
+function fmtDate(d: Date | null | undefined) {
+  if (!d) return '—';
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+function fmtMoney(n: number, decimals = 0) {
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+}
+
+function CompSummaryCard({
+  inputs,
+  result,
+  prefill,
+}: {
+  inputs: CalcInputs;
+  result: NonNullable<ReturnType<typeof calculate>>;
+  prefill?: UnifiedListing | null;
+}) {
+  const { results, schedule } = result;
+  const sqft = parseFloat(inputs.sqFt) || 0;
+  const landSF = inputs.landAcres ? Math.round(parseFloat(inputs.landAcres) * 43560) : 0;
+  const dom = inputs.daysOnMarket ? parseFloat(inputs.daysOnMarket) : 0;
+  const expDate = fmtDate(results.expireDate);
+  const occDate = inputs.occupancyDate
+    ? fmtDate(new Date(inputs.occupancyDate))
+    : '—';
+
+  const yr = (n: number) => {
+    const row = schedule[n - 1];
+    return row ? `$${row.rate.toFixed(2)} ${inputs.rentType}` : '—';
+  };
+
+  const Field = ({ label, value, bold }: { label: string; value: string; bold?: boolean }) => (
+    <div className="flex items-baseline gap-1 min-w-0">
+      <span className="text-slate-500 text-[10px] font-semibold whitespace-nowrap shrink-0">{label}:</span>
+      <span className={`text-[11px] truncate ${bold ? 'font-bold text-slate-900' : 'text-slate-700'}`}>{value || '—'}</span>
+    </div>
+  );
+
+  const address = prefill
+    ? [prefill.street_address, prefill.suite, prefill.city, prefill.state].filter(Boolean).join(', ')
+    : inputs.sqFt
+    ? `${Number(inputs.sqFt).toLocaleString()} SF property`
+    : 'Lease Comp Summary';
+
+  return (
+    <Card className="overflow-hidden">
+      {/* Header */}
+      <div className="bg-slate-700 text-white px-4 py-2 text-xs font-mono flex items-center justify-between">
+        <span className="font-bold">{address}</span>
+        <span className="text-slate-300">{inputs.rentType}</span>
+      </div>
+
+      {/* Main grid — 6 column pairs */}
+      <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-1 font-mono text-[11px]">
+        {/* Col 1 — Financials */}
+        <div className="space-y-0.5">
+          <Field label="Leased SqFt" value={sqft > 0 ? sqft.toLocaleString() : ''} bold />
+          <Field label="Rent/SqFt" value={inputs.rentPerSqFt ? `$${inputs.rentPerSqFt} ${inputs.rentType}` : ''} bold />
+          <Field label="Free Rent" value={inputs.freeRentMonths !== '0' && inputs.freeRentMonths ? `${inputs.freeRentMonths} Mo` : '0'} />
+          <Field label="Effect Rent" value={results.effectiveRate > 0 ? `$${results.effectiveRate.toFixed(2)}` : ''} bold />
+          <Field label="Consid." value={results.totalConsideration > 0 ? fmtMoney(results.totalConsideration) : ''} />
+          <Field label="Prop Type" value="Industrial" />
+          <Field label="Sub-Type" value="Light Industrial" />
+          <Field label="Bldg Class" value="" />
+          <Field label="Space Type" value="" />
+        </div>
+
+        {/* Col 2 — Dates & Terms */}
+        <div className="space-y-0.5">
+          <Field label="Trans Date" value="" />
+          <Field label="Occ Date" value={occDate} />
+          <Field label="Term" value={inputs.termInMonths ? `${inputs.termInMonths} Mo` : ''} />
+          <Field label="Exp Date" value={expDate} />
+          <Field label="On Market" value={dom > 0 ? `${dom} Days` : ''} />
+          <Field label="Ask Rent" value={inputs.rentPerSqFt ? `$${inputs.rentPerSqFt} ${inputs.rentType}` : ''} />
+          <Field label="Multi-Ten" value="" />
+          <Field label="POL" value="" />
+          <Field label="Yr Built" value="" />
+        </div>
+
+        {/* Col 3 — Rent Schedule */}
+        <div className="space-y-0.5">
+          <Field label="Rent Yr1" value={yr(1)} />
+          <Field label="Rent Yr2" value={yr(2)} />
+          <Field label="Rent Yr3" value={yr(3)} />
+          <Field label="Rent Yr4" value={yr(4)} />
+          <Field label="Rent Yr5" value={yr(5)} />
+          <Field label="Rent Yr6" value={yr(6)} />
+          <Field label="Rent Yr7" value={yr(7)} />
+          <Field label="Rent Adj" value={inputs.rentAdjustments} />
+        </div>
+
+        {/* Col 4 — Property Specs */}
+        <div className="space-y-0.5">
+          <Field label="DH Door" value="" />
+          <Field label="GL Door" value="" />
+          <Field label="Height" value="" />
+          <Field label="Amps" value="" />
+          <Field label="Parking" value={inputs.parkingRatio} />
+          <Field label="Load" value="" />
+          <Field label="Sprink" value="" />
+          <Field label="TI" value={inputs.tiA && inputs.tiA !== '0' ? fmtMoney(parseFloat(inputs.tiA)) : '$0.00'} />
+          <Field label="Options" value="" />
+        </div>
+
+        {/* Col 5 — Building Details */}
+        <div className="space-y-0.5">
+          <Field label="Bldg SqFt" value={prefill?.building_sqft ? Number(prefill.building_sqft.replace(/[^0-9.]/g, '')).toLocaleString() : ''} />
+          <Field label="Land SqFt" value={landSF > 0 ? landSF.toLocaleString() : ''} />
+          <Field label="Office SqFt" value={prefill?.office_sqft ? Number(prefill.office_sqft.replace(/[^0-9.]/g, '')).toLocaleString() : ''} />
+          <Field label="Updated" value="" />
+          <Field label="APN" value="" />
+          <Field label="Source" value={prefill?.source ?? ''} />
+          <Field label="Rail" value="" />
+          <Field label="Yard" value="" />
+          <Field label="Cons Type" value="" />
+        </div>
+
+        {/* Col 6 — IDs */}
+        <div className="space-y-0.5">
+          <Field label="ID" value={prefill?.listing_number ?? ''} />
+          <Field label="Office" value="" />
+          <Field label="Updated" value="" />
+          <Field label="Update By" value="" />
+          <Field label="TI/SF" value={results.tiPerSqFt > 0 ? `$${results.tiPerSqFt.toFixed(2)}` : '$0.00'} />
+        </div>
+      </div>
+
+      {/* Broker/Party section */}
+      <div className="border-t border-slate-200 px-4 py-3 grid grid-cols-2 gap-x-8 gap-y-1 font-mono text-[11px]">
+        <div className="space-y-0.5">
+          <Field label="Lessee" value="" />
+          <Field label="Contact" value="" />
+          <Field label="Proc Firm" value="" />
+        </div>
+        <div className="space-y-0.5">
+          <Field label="Lessor" value={prefill?.property_name ?? ''} />
+          <Field label="List Firm" value="" />
+          <Field label="Agent" value={prefill?.company_agent ?? ''} />
+        </div>
+      </div>
+
+      {/* Comments */}
+      <div className="border-t border-slate-200 px-4 py-2 font-mono text-[11px]">
+        <Field label="Comments" value={prefill?.comments ?? prefill?.highlights ?? ''} />
+      </div>
+    </Card>
+  );
+}
+
 // ---- Main Component ----
 
 export function LeaseCalculator({
@@ -154,7 +310,6 @@ export function LeaseCalculator({
 }) {
   const [inputs, setInputs] = useState<CalcInputs>(DEFAULT_INPUTS);
 
-  // Apply prefill whenever a listing is sent from the search tab
   useEffect(() => {
     if (!prefill) return;
     const sqFt = prefill.available_sqft || prefill.building_sqft || '';
@@ -185,6 +340,10 @@ export function LeaseCalculator({
     if (dotIndex === -1) return 2;
     return Math.max(2, r.length - dotIndex - 1);
   })();
+
+  // Derived values
+  const monthsOnMarket = inputs.daysOnMarket ? Math.round(parseFloat(inputs.daysOnMarket) / 30) : null;
+  const landSF = inputs.landAcres ? Math.round(parseFloat(inputs.landAcres) * 43560) : null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -259,16 +418,37 @@ export function LeaseCalculator({
                   placeholder="3% or $0.05"
                 />
                 <InputGroup
-                  label="TI Allowance ($)"
+                  label="TI's Amount ($)"
                   value={inputs.tiA}
                   onChange={set('tiA')}
                   placeholder="0"
+                  prefix="$"
                 />
                 <InputGroup
                   label="Effective Rent"
                   value={result ? `$${result.results.effectiveRate.toFixed(rateDecimals)}` : ''}
                   onChange={() => {}}
                   readOnly
+                />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <InputGroup
+                  label="Days on Market"
+                  value={inputs.daysOnMarket}
+                  onChange={set('daysOnMarket')}
+                  placeholder="e.g. 180"
+                />
+                <InputGroup
+                  label="Land Acres"
+                  value={inputs.landAcres}
+                  onChange={set('landAcres')}
+                  placeholder="e.g. 2.5"
+                />
+                <InputGroup
+                  label="Parking Ratio"
+                  value={inputs.parkingRatio}
+                  onChange={set('parkingRatio')}
+                  placeholder="e.g. 2.5:1"
                 />
               </div>
             </div>
@@ -319,18 +499,18 @@ export function LeaseCalculator({
               subtext="Gross Rent"
             />
             <ResultCard
-              label="Net Total"
-              value={`$${result.results.netTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-              subtext="After Free Rent"
+              label="TI's (SF)"
+              value={result.results.tiPerSqFt > 0 ? `$${result.results.tiPerSqFt.toFixed(2)}` : '—'}
+              subtext="Tenant Improvement / SF"
             />
           </div>
 
           {/* Secondary metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <ResultCard
-              label="Year 1 Annual"
-              value={`$${result.results.year1AnnualRent.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-              subtext="Annual Rent"
+              label="Months on Market"
+              value={monthsOnMarket !== null ? String(monthsOnMarket) : '—'}
+              subtext={inputs.daysOnMarket ? `${inputs.daysOnMarket} Days` : 'Days on Market / 30'}
             />
             <ResultCard
               label="Free Rent Value"
@@ -338,9 +518,9 @@ export function LeaseCalculator({
               subtext="Concession"
             />
             <ResultCard
-              label="TI / SF"
-              value={result.results.tiPerSqFt > 0 ? `$${result.results.tiPerSqFt.toFixed(2)}` : '—'}
-              subtext="Tenant Improvement"
+              label="Land SF"
+              value={landSF !== null ? landSF.toLocaleString() : '—'}
+              subtext={inputs.landAcres ? `${inputs.landAcres} Acres` : 'Land Acres × 43,560'}
             />
             <ResultCard
               label="Expiration"
@@ -377,14 +557,22 @@ export function LeaseCalculator({
                       <td className="px-4 py-3 font-medium text-slate-900">{row.year}</td>
                       <td className="px-4 py-3 text-blue-600 font-bold">${row.rate.toFixed(rateDecimals)}</td>
                       <td className="px-4 py-3">{row.months}</td>
-                      <td className="px-4 py-3">${row.monthlyRent.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-medium">${row.periodTotal.toLocaleString()}</td>
+                      <td className="px-4 py-3">${row.monthlyRent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 text-right font-medium">${row.periodTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </Card>
+
+          {/* Comp Summary Card */}
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <Calculator size={13} /> Comp Summary
+            </h3>
+            <CompSummaryCard inputs={inputs} result={result} prefill={prefill} />
+          </div>
         </div>
       ) : (
         <div className="h-full flex items-center justify-center text-slate-400 p-12 border-2 border-dashed border-slate-300 rounded-xl">
