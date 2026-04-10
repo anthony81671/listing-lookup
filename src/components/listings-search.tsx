@@ -419,40 +419,75 @@ export function ListingsSearch() {
                 <th className="px-4 py-3 text-center hidden lg:table-cell">DH/GL</th>
                 <th className="px-4 py-3 text-center hidden xl:table-cell">Clr Ht</th>
                 <th className="px-4 py-3 hidden xl:table-cell">Date</th>
+                <th className="px-4 py-3 text-center">Links</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {listings.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-400">
                     {error ? 'Could not load listings' : 'No listings found'}
                   </td>
                 </tr>
               ) : (
-                listings.map((l) => (
-                  <tr key={`${l.source}-${l.report_id}`} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setSelected(l)}>
-                    <td className="px-4 py-3">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.source === 'AIR' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                        {l.source}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{l.street_address ?? '—'}</div>
-                      {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{fmt(l.city)}</td>
-                    <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.building_sqft)}</td>
-                    <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.available_sqft)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-blue-600 hidden lg:table-cell">
-                      {l.rate_per_sf ? `$${l.rate_per_sf}` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center text-slate-600 hidden lg:table-cell">
-                      {fmt(l.dh_doors, '0')}/{fmt(l.gl_doors, '0')}
-                    </td>
-                    <td className="px-4 py-3 text-center text-slate-600 hidden xl:table-cell">{fmt(l.clear_height)}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs hidden xl:table-cell">{fmt(l.listing_date)}</td>
-                  </tr>
-                ))
+                listings.map((l) => {
+                  const photoUrl = l.photo_url;
+                  const brochureUrl = l.marketing_flyer || l.pdf_url || l.property_link;
+                  return (
+                    <tr key={`${l.source}-${l.report_id}`} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => setSelected(l)}>
+                      <td className="px-4 py-3">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.source === 'AIR' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                          {l.source}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">{l.street_address ?? '—'}</div>
+                        {l.suite && <div className="text-xs text-slate-400">Ste {l.suite}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 hidden sm:table-cell">{fmt(l.city)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.building_sqft)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600 hidden md:table-cell">{fmtNum(l.available_sqft)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-blue-600 hidden lg:table-cell">
+                        {l.rate_per_sf ? `$${l.rate_per_sf}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600 hidden lg:table-cell">
+                        {fmt(l.dh_doors, '0')}/{fmt(l.gl_doors, '0')}
+                      </td>
+                      <td className="px-4 py-3 text-center text-slate-600 hidden xl:table-cell">{fmt(l.clear_height)}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs hidden xl:table-cell">{fmt(l.listing_date)}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {photoUrl ? (
+                            <a
+                              href={photoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="View Photo"
+                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                            >
+                              Photo
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-200">—</span>
+                          )}
+                          {brochureUrl ? (
+                            <a
+                              href={brochureUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="View Brochure"
+                              className="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-700 transition-colors"
+                            >
+                              PDF
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-200">—</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
